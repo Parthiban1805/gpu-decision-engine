@@ -5,7 +5,7 @@ a model that **scores a dynamically built set of candidate actions in one forwar
 returns calibrated probabilities, and sits **above** a constraint/policy layer.
 Everything is validated in simulation on **public GPU-cluster traces** before any real-cluster work.
 
-> Read `CLAUDE.md` first (operating rules). This file is the full spec. Work phase by phase.
+> Read `AGENTS.md` first (operating rules). This file is the full spec. Work phase by phase.
 > Never claim a result you have not measured. Every number reported must come from a command that can be re-run.
 
 ---
@@ -103,7 +103,7 @@ vram_gb_src: str; job_type_src: str; priority_src: str; deadline_src: str; runti
 
 ```
 gpu-decision-engine/
-├── CLAUDE.md
+├── AGENTS.md
 ├── PLAN.md
 ├── README.md
 ├── pyproject.toml / requirements.txt   # pinned versions (requirements.in = top-level, requirements.txt = lock)
@@ -345,4 +345,4 @@ Cross-platform (no GNU make): `python tasks.py <target>`, stdlib-only, runs ever
 `python tasks.py setup` · `python tasks.py data` · `python tasks.py sim-smoke` · `python tasks.py baselines` · `python tasks.py label` · `python tasks.py train-v1` · `python tasks.py bench` · `python tasks.py train-v2` · `python tasks.py api` · `python tasks.py test` · `python tasks.py hwcheck` · `python tasks.py vram-probe` · `python tasks.py lock`
 
 ## Appendix C — First prompt to give Claude Code
-> Read CLAUDE.md and PLAN.md. Start with Phase P0, then P1. After each phase, run its gate checks, commit, and give me a short status (what passed, what numbers, what's next). Stop and ask me if a dataset download needs a manual step (survey/login) or if any gate fails. Do not proceed past P8 without confirming a GPU is available.
+> Read AGENTS.md and PLAN.md. Start with Phase P0, then P1. After each phase, run its gate checks, commit, and give me a short status (what passed, what numbers, what's next). Stop and ask me if a dataset download needs a manual step (survey/login) or if any gate fails. Do not proceed past P8 without confirming a GPU is available.

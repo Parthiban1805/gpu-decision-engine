@@ -1,4 +1,4 @@
-# CLAUDE.md — GPU Decision Engine (GDE)
+# AGENTS.md — GPU Decision Engine (GDE)
 
 Project: learned, cost-aware GPU workload scheduling decision model (CLEF-style candidate scoring), validated in simulation on public GPU-cluster traces. Full spec: `PLAN.md`. Read it before doing anything.
 
