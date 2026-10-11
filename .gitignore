@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.hypothesis/
+
+# Data is never committed; provenance files are.
+data/**
+!data/
+!data/*/
+!data/*/.gitkeep
+!data/raw/*/
+!data/raw/*/SOURCES.md
+
+checkpoints/**
+experiments/**
+!checkpoints/.gitkeep
+!experiments/.gitkeep

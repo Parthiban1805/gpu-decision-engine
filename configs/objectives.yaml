@@ -1,0 +1,10 @@
+presets:
+  balanced:         {w_cost: 1.0, w_deadline: 2.0, w_completion: 1.0, w_frag: 0.5}
+  latency_critical: {w_cost: 0.3, w_deadline: 5.0, w_completion: 1.0, w_frag: 0.2}
+  cost_saver:       {w_cost: 2.0, w_deadline: 1.0, w_completion: 0.5, w_frag: 1.0}
+constants:                       # ASSUMPTIONS, not measured prices
+  energy_price_per_kwh: 0.10
+  idle_gpu_penalty_per_hour: 0.5
+  slo_miss_penalty: 50.0
+horizon: {n_arrivals: 20, max_seconds: 3600, terminal_penalty: true}
+labeling: {tau: 1.0, top_k_candidates: 16, rollout_policy: best_heuristic}

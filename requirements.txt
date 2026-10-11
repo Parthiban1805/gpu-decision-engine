@@ -1,0 +1,10 @@
+# Fully pinned lock file. Regenerate with: python tasks.py lock
+colorama==0.4.6
+hypothesis==6.169.0
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pytest==9.1.1
+PyYAML==6.0.3
+sortedcontainers==2.4.0

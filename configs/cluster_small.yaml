@@ -1,0 +1,3 @@
+gpus:
+  - {count: 8, type: generic_24gb, vram_gb: 24, compute_factor: 1.0, p_idle_w: 60, p_peak_w: 300, price_per_hour: 1.0}
+power_budget_kw: 3.0
