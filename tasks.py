@@ -96,6 +96,18 @@ def task_vram_probe(args: list[str]) -> None:
     run([py, ROOT / "scripts" / "hw_check.py"])
 
 
+def task_data(args: list[str]) -> None:
+    """Download traces per their READMEs (data/raw/<name>/SOURCES.md), then docs/data_dictionary.md."""
+    py = require_venv()
+    run([py, ROOT / "scripts" / "download_data.py", *args])
+    run([py, ROOT / "scripts" / "data_dictionary.py"])
+
+
+def task_eda(args: list[str]) -> None:
+    """Per-dataset summary stats (job counts, durations, GPU requests, job types) -> reports/eda/."""
+    run([require_venv(), ROOT / "scripts" / "eda.py", *args])
+
+
 def task_test(args: list[str]) -> None:
     """CI-style check: interpreter version, dependency consistency, pytest."""
     py = require_venv()
@@ -120,7 +132,8 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "hwcheck": task_hwcheck,
     "vram-probe": task_vram_probe,
     "test": task_test,
-    "data": not_implemented("P1"),
+    "data": task_data,
+    "eda": task_eda,
     "sim-smoke": not_implemented("P3"),
     "baselines": not_implemented("P4"),
     "label": not_implemented("P6"),

@@ -115,6 +115,7 @@ gpu-decision-engine/
 │   ├── workload_synthesis.yaml         # §2.3
 │   ├── runtime.yaml                    # device: auto | cuda | cpu (training/inference only)
 │   ├── backbone.yaml                   # Qwen model id + pinned revision
+│   ├── datasets.yaml                   # dataset repo entry points; URLs/checksums come from READMEs
 │   └── experiment_*.yaml
 ├── data/{raw,interim,processed,splits,labels}/    # gitignored; keep SOURCES.md + checksums
 ├── docs/data_dictionary.md             # true column names per dataset (Phase 1 output)
@@ -123,6 +124,8 @@ gpu-decision-engine/
 │   ├── hw_check.py                     # writes docs/env.md
 │   ├── vram_probe.py                   # Qwen frozen-forward / LoRA-step peak VRAM
 │   ├── download_data.py                # reads each README, downloads, checksums
+│   ├── data_dictionary.py              # docs/data_dictionary.md from files, checked vs README
+│   ├── eda.py                          # P1 summary stats -> reports/eda/p1_summary.md
 │   ├── make_splits.py
 │   └── make_report.py
 ├── src/gde/

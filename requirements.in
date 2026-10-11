@@ -6,6 +6,8 @@
 # CUDA 13.1, so cu132 is too new; cu130 is the newest build the driver supports.
 --extra-index-url https://download.pytorch.org/whl/cu130
 torch==2.14.1+cu130
+pandas
+pyarrow
 transformers
 peft
 accelerate

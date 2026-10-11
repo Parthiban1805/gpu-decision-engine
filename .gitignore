@@ -12,6 +12,7 @@ data/**
 !data/*/.gitkeep
 !data/raw/*/
 !data/raw/*/SOURCES.md
+!data/raw/DOWNLOADS.md
 
 checkpoints/**
 experiments/**

@@ -1,0 +1,52 @@
+# Dataset entry points (PLAN.md §2.1). Only the repository location is configured here; file URLs,
+# checksums and expected files are read from each dataset's README at download time.
+# README is fetched from https://raw.githubusercontent.com/<repo>/<ref>/<path>/README.md
+datasets:
+  alibaba2020:
+    enabled: true
+    github: {repo: alibaba/clusterdata, ref: master, path: cluster-trace-gpu-v2020}
+    method: readme_tarballs
+    license_file: LICENSE
+    header_dir: data              # README checksum block lists <table>.header files; they live here
+    # README lists 7 tables. Downloaded by default: what GDE needs for job/task/placement fields.
+    # Others (pai_instance_table 663M, pai_sensor_table 388M, pai_machine_metric 198M) via --tables.
+    tables: [pai_job_table, pai_task_table, pai_group_tag_table, pai_machine_spec]
+    citation: 'Weng et al., "MLaaS in the Wild: Workload Analysis and Scheduling in Large-Scale Heterogeneous GPU Clusters", NSDI 2022.'
+
+  alibaba2023:
+    enabled: true
+    github: {repo: alibaba/clusterdata, ref: master, path: cluster-trace-gpu-v2023}
+    method: readme_relative_links
+    link_pattern: '^\./csv/[^/]+\.csv$'
+    license_file: null
+    citation: 'Weng et al., "Beware of Fragmentation: Scheduling GPU-Sharing Workloads with Fragmentation Gradient Descent", USENIX ATC 2023.'
+
+  helios:
+    enabled: true
+    github: {repo: S-Lab-System-Group/HeliosData, ref: master, path: ""}
+    method: github_repo_archive
+    archive: data.zip
+    license_file: LICENSE.txt
+    citation: 'Hu et al., "Characterization and Prediction of Deep Learning Workloads in Large-Scale GPU Datacenters", SC 2021.'
+
+  philly:
+    enabled: false
+    requires_confirmation: true   # ~0.98 GB compressed / 6.6 GB unpacked; ask the user first (--confirm-large)
+    github: {repo: msr-fiddle/philly-traces, ref: master, path: ""}
+    method: github_repo_archive
+    archive: trace-data.tar.gz
+    license_file: LICENSE
+    citation: 'Jeon et al., "Analysis of Large-Scale Multi-Tenant GPU Clusters for DNN Training Workloads", USENIX ATC 2019.'
+
+  acmetrace:
+    enabled: false
+    skip_reason: Skipped in P1 by user decision.
+  alibaba2026:
+    enabled: false
+    skip_reason: Skipped in P1 by user decision (stretch dataset).
+  atlas:
+    enabled: false
+    skip_reason: >-
+      Verified to exist (ICLR 2026, "ATLAS: Alibaba Dataset and Benchmark for Learning-Augmented
+      Scheduling", github.com/zhiyunjiang0810/non-clairvoyant-with-predictions). It is derived from
+      alibaba2020, which is downloaded directly; not downloaded in P1.
