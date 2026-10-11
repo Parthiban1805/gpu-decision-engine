@@ -74,7 +74,12 @@ def task_lock(args: list[str]) -> None:
         [str(py), "-m", "pip", "freeze", "--exclude-editable"],
         cwd=ROOT, capture_output=True, text=True, check=True,
     ).stdout
+    pip_options = [
+        line.strip() for line in (ROOT / "requirements.in").read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("--")
+    ]
     header = "# Fully pinned lock file. Regenerate with: python tasks.py lock\n"
+    header += "".join(f"{opt}\n" for opt in pip_options)
     (ROOT / "requirements.txt").write_text(header + frozen, encoding="utf-8")
     print("wrote requirements.txt")
 
@@ -82,6 +87,13 @@ def task_lock(args: list[str]) -> None:
 def task_hwcheck(args: list[str]) -> None:
     """Run the hardware/environment check and write docs/env.md."""
     run([require_venv(), ROOT / "scripts" / "hw_check.py", *args])
+
+
+def task_vram_probe(args: list[str]) -> None:
+    """Measure Qwen backbone peak VRAM (frozen forward + LoRA step), then refresh docs/env.md."""
+    py = require_venv()
+    run([py, ROOT / "scripts" / "vram_probe.py", *args])
+    run([py, ROOT / "scripts" / "hw_check.py"])
 
 
 def task_test(args: list[str]) -> None:
@@ -106,6 +118,7 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "setup": task_setup,
     "lock": task_lock,
     "hwcheck": task_hwcheck,
+    "vram-probe": task_vram_probe,
     "test": task_test,
     "data": not_implemented("P1"),
     "sim-smoke": not_implemented("P3"),

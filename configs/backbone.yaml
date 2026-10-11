@@ -1,0 +1,5 @@
+# Qwen backbone for the V2 scorer (PLAN.md §6). Exact id + revision so runs are reproducible.
+# Chosen 2026-10-11 from huggingface.co/Qwen: smallest current text-only Qwen (596M params, not gated).
+# Newer Qwen3.5-0.8B(-Base) exists but is a multimodal (image-text-to-text) checkpoint.
+model_id: Qwen/Qwen3-0.6B-Base
+revision: da87bfb608c14b7cf20ba1ce41287e8de496c0cd

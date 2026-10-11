@@ -19,7 +19,7 @@ Everything is validated in simulation on **public GPU-cluster traces** before an
 5. **Baselines first.** The classical baseline (V1) and strong heuristics must exist and be benchmarked before any LLM backbone work. If an MLP/GBM matches the Qwen model, report that honestly.
 6. **Safety.** The model never executes anything. A deterministic policy layer validates every recommendation; the API returns *recommended* and *final validated* action separately.
 7. **Small commits, tests with every module, pinned dependencies, config-driven (YAML), no hard-coded paths.**
-8. **Hardware check first.** Run `nvidia-smi` and `python -c "import torch; print(torch.cuda.is_available())"`. Phases 0–8 are CPU-only. Phase 9+ (Qwen) needs a GPU; if none, stop at Phase 8 and tell the user (Colab/cloud GPU is the fallback).
+8. **Hardware check first.** Run `python tasks.py hwcheck` (runs `nvidia-smi` and the torch CUDA probe, writes `docs/env.md`). **Compute split:** the simulator, baselines and labeling (P3–P6) stay CPU-only and parallelize across cores (`multiprocessing`); MLP training (P7) and the Qwen scorer (P9+) use the GPU. All training/inference code picks its device via `gde.runtime.resolve_device()` from `configs/runtime.yaml` (`auto | cuda | cpu`) with a CPU fallback. Phase 9+ (Qwen) needs a GPU; if none, stop at Phase 8 and tell the user (Colab/cloud GPU is the fallback). Measured fit of the Qwen backbone on this machine's GPU: `python tasks.py vram-probe` → `docs/env.md`.
 
 ---
 
@@ -113,10 +113,15 @@ gpu-decision-engine/
 │   ├── cluster_medium.yaml             # 64 GPUs, heterogeneous
 │   ├── objectives.yaml                 # weights w1..w4, price/power constants
 │   ├── workload_synthesis.yaml         # §2.3
+│   ├── runtime.yaml                    # device: auto | cuda | cpu (training/inference only)
+│   ├── backbone.yaml                   # Qwen model id + pinned revision
 │   └── experiment_*.yaml
 ├── data/{raw,interim,processed,splits,labels}/    # gitignored; keep SOURCES.md + checksums
 ├── docs/data_dictionary.md             # true column names per dataset (Phase 1 output)
+├── docs/env.md                         # hardware check + measured Qwen VRAM (generated)
 ├── scripts/
+│   ├── hw_check.py                     # writes docs/env.md
+│   ├── vram_probe.py                   # Qwen frozen-forward / LoRA-step peak VRAM
 │   ├── download_data.py                # reads each README, downloads, checksums
 │   ├── make_splits.py
 │   └── make_report.py
@@ -213,7 +218,7 @@ Sample states from the *baseline* schedulers' trajectories first; Phase 11 adds 
 - Output: masked softmax over candidates.
 
 ### V2 — CLEF-like backbone scorer
-- Backbone: a small Qwen model (e.g., Qwen2.5-0.5B or the current small Qwen3 variant — **check Hugging Face for what exists and what fits VRAM at run time; record the exact model id/revision in the config**).
+- Backbone: a small Qwen model (e.g., Qwen2.5-0.5B or the current small Qwen3 variant — **check Hugging Face for what exists and what fits VRAM at run time; record the exact model id/revision in the config**). Current pick: `configs/backbone.yaml` (`Qwen/Qwen3-0.6B-Base`, pinned revision); measured VRAM in `docs/env.md`.
 - **One forward pass per state.** Two input encodings to ablate: (i) *text-serialized* compact state with a marker token per candidate (`<cand_i>`); (ii) *numeric-embedding* variant: project features to the hidden size and feed as input embeddings (usually better, test it).
 - Read hidden states at candidate-marker positions → MLP head → logit per candidate → masked softmax. No autoregressive generation.
 - Training stages: (1) frozen backbone + trainable head; (2) LoRA via PEFT + head. Keep LoRA only if held-out decision quality improves enough to justify added memory/latency.
@@ -337,7 +342,7 @@ power_budget_kw: 3.0
 
 ## Appendix B — Task runner targets
 Cross-platform (no GNU make): `python tasks.py <target>`, stdlib-only, runs everything inside `.venv`.
-`python tasks.py setup` · `python tasks.py data` · `python tasks.py sim-smoke` · `python tasks.py baselines` · `python tasks.py label` · `python tasks.py train-v1` · `python tasks.py bench` · `python tasks.py train-v2` · `python tasks.py api` · `python tasks.py test` · `python tasks.py hwcheck` · `python tasks.py lock`
+`python tasks.py setup` · `python tasks.py data` · `python tasks.py sim-smoke` · `python tasks.py baselines` · `python tasks.py label` · `python tasks.py train-v1` · `python tasks.py bench` · `python tasks.py train-v2` · `python tasks.py api` · `python tasks.py test` · `python tasks.py hwcheck` · `python tasks.py vram-probe` · `python tasks.py lock`
 
 ## Appendix C — First prompt to give Claude Code
 > Read CLAUDE.md and PLAN.md. Start with Phase P0, then P1. After each phase, run its gate checks, commit, and give me a short status (what passed, what numbers, what's next). Stop and ask me if a dataset download needs a manual step (survey/login) or if any gate fails. Do not proceed past P8 without confirming a GPU is available.

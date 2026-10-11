@@ -1,21 +1,22 @@
 """Hardware/environment check (PLAN.md §0 rule 8). Writes docs/env.md.
 
-Runs `nvidia-smi` and the torch CUDA probe from the plan, and records the
-interpreter and pinned environment so the result can be re-run and compared.
+Runs `nvidia-smi` and the torch CUDA probe, renders docs/vram_probe.json (if present),
+and records the interpreter and pinned environment so the result can be re-run and compared.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import platform
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-TORCH_PROBE = 'import torch; print(torch.__version__); print(torch.cuda.is_available())'
 
 
 def sh(cmd: list[str]) -> tuple[int, str]:
@@ -43,17 +44,98 @@ def gpu_section() -> tuple[list[str], bool]:
     return lines, found
 
 
-def torch_section() -> list[str]:
-    code, out = sh([sys.executable, "-c", TORCH_PROBE])
-    cmd = f'`python -c "{TORCH_PROBE}"`'
-    if code != 0:
-        last = out.splitlines()[-1] if out else "no output"
-        return [f"{cmd} failed: `{last}`",
-                "",
-                "torch is not part of the P0 environment. It is added when a phase needs it "
-                "(MLP set-encoder in P7, Qwen scorer in P9); re-run this check then."]
-    version, cuda = (out.splitlines() + ["?", "?"])[:2]
-    return [f"{cmd}", "", f"- torch version: `{version}`", f"- `torch.cuda.is_available()`: `{cuda}`"]
+def torch_section() -> tuple[list[str], dict[str, Any]]:
+    try:
+        import torch
+    except ImportError as exc:
+        return [f"torch is not importable: `{exc}`. Run `python tasks.py setup`."], {}
+    info: dict[str, Any] = {
+        "torch version": torch.__version__,
+        "CUDA version (torch build)": torch.version.cuda,
+        "torch.cuda.is_available()": torch.cuda.is_available(),
+    }
+    if torch.cuda.is_available():
+        free, total = torch.cuda.mem_get_info(0)
+        major, minor = torch.cuda.get_device_capability(0)
+        info |= {
+            "GPU name": torch.cuda.get_device_name(0),
+            "compute capability": f"{major}.{minor}",
+            "bf16 supported": torch.cuda.is_bf16_supported(),
+            "cuDNN": torch.backends.cudnn.version(),
+            "total VRAM (MiB)": round(total / 2**20),
+            "free VRAM (MiB)": round(free / 2**20),
+        }
+    from gde.runtime import resolve_device
+    info["configs/runtime.yaml device resolves to"] = str(resolve_device())
+    return [f"- {k}: `{v}`" for k, v in info.items()], info
+
+
+def vram_probe_section() -> list[str]:
+    path = ROOT / "docs" / "vram_probe.json"
+    if not path.exists():
+        return ["Not run yet. Run `python tasks.py vram-probe`."]
+    out: list[str] = []
+    for model_id, r in json.loads(path.read_text(encoding="utf-8")).items():
+        out += [
+            f"### `{model_id}` @ `{r['revision'][:12]}`",
+            "",
+            f"Measured {r['generated']} with `{r['command']}`: {r['architecture']}, "
+            f"{r['params'] / 1e6:.0f}M params, {r['dtype']}, seq_len {r['seq_len']}, "
+            f"attention `{r['attn_implementation']}`, torch {r['torch']} / CUDA {r['cuda']}.",
+            f"Weights on GPU: {r['weights_mib']} MiB. Already in use before loading "
+            f"(CUDA context + other processes): {r['in_use_before_load_mib']} MiB of {r['total_vram_mib']} MiB.",
+            "",
+            "| Run | Batch | Status | Peak allocated (MiB) | Peak reserved (MiB) | Est. total in use (MiB) | Time (s) |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        runs = [("frozen forward", r["frozen_forward"]), ("LoRA step", r["lora_step"]["by_batch"])]
+        for label, by_batch in runs:
+            for bs, m in by_batch.items():
+                if m["status"] == "OOM":
+                    out.append(f"| {label} | {bs} | **OOM** | – | – | – | – |")
+                else:
+                    status = m["status"] if m["status"] == "fits" else f"**{m['status']}**"
+                    out.append(f"| {label} | {bs} | {status} | {m['peak_allocated_mib']} | "
+                               f"{m['peak_reserved_mib']} | {m['est_total_in_use_mib']} | {m['seconds']} |")
+        cfg = r["lora_step"]["config"]
+        out += ["", "LoRA config: " + ", ".join(f"{k}={v}" for k, v in cfg.items()), ""]
+    out += [
+        "\"Fits\" = peak reserved + memory in use before loading ≤ dedicated VRAM. On Windows the "
+        "driver can spill into shared system RAM instead of raising OOM, so a run that completes "
+        "can still exceed dedicated VRAM (and becomes much slower).",
+        "",
+        "Times are single runs and the first run of each section includes CUDA warm-up; they are "
+        "not latency measurements (P9 measures p50/p95 latency properly). The same LoRA settings "
+        "give different trainable-parameter counts per model because only layers with standard "
+        "q/k/v/o attention projections receive adapters.",
+    ]
+    return out
+
+
+def implication_section(cuda_ok: bool) -> list[str]:
+    out = [
+        "Simulator, baselines and labeling (P3–P6) are CPU-only and parallelized across cores; "
+        "they do not depend on the GPU. MLP training (P7) and the Qwen scorer (P9+) use the GPU "
+        "via `configs/runtime.yaml` and fall back to CPU.",
+        "",
+    ]
+    if not cuda_ok:
+        return out + ["torch cannot use CUDA here: stop at P8 and use Colab/cloud GPU for P9+ "
+                      "(PLAN.md §0 rule 8)."]
+    path = ROOT / "docs" / "vram_probe.json"
+    if not path.exists():
+        return out + ["CUDA works. Qwen memory fit is not measured yet (`python tasks.py vram-probe`)."]
+    for model_id, r in json.loads(path.read_text(encoding="utf-8")).items():
+        def fitting(by_batch: dict[str, Any]) -> list[str]:
+            return [bs for bs, m in by_batch.items() if m["status"] == "fits"]
+        fwd = fitting(r["frozen_forward"])
+        lora = fitting(r["lora_step"]["by_batch"])
+        fwd_txt = f"fits at batch {', '.join(fwd)}" if fwd else "does not fit at any tested batch size"
+        lora_txt = (f"fits in 4 GB at batch {', '.join(lora)}" if lora
+                    else "**does not fit in this GPU's dedicated VRAM at any tested batch size**")
+        out.append(f"- `{model_id}` ({r['dtype']}, seq_len {r['seq_len']}): frozen forward {fwd_txt}; "
+                   f"one LoRA step with gradient checkpointing {lora_txt}.")
+    return out
 
 
 def main() -> None:
@@ -62,6 +144,7 @@ def main() -> None:
     args = ap.parse_args()
 
     gpu_lines, has_gpu = gpu_section()
+    torch_lines, torch_info = torch_section()
     _, pip_freeze = sh([sys.executable, "-m", "pip", "freeze", "--exclude-editable"])
     now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -80,19 +163,17 @@ def main() -> None:
         "",
         *gpu_lines,
         "",
-        "## PyTorch CUDA probe",
+        "## PyTorch",
         "",
-        *torch_section(),
+        *torch_lines,
+        "",
+        "## Qwen VRAM probe (`scripts/vram_probe.py`)",
+        "",
+        *vram_probe_section(),
         "",
         "## Implication for the phase plan",
         "",
-        "Phases P0–P8 are CPU-only and do not depend on this result.",
-        "",
-        ("An NVIDIA GPU is visible, so P9+ (Qwen scorer) is not blocked by absence of a GPU. "
-         "Whether its memory is enough for the chosen backbone (frozen and LoRA) must be "
-         "measured at P9, not assumed."
-         if has_gpu else
-         "No NVIDIA GPU is visible: stop at P8 and use Colab/cloud GPU for P9+ (PLAN.md §0 rule 8)."),
+        *implication_section(bool(torch_info.get("torch.cuda.is_available()"))),
         "",
         "## Pinned environment (`pip freeze`)",
         "",

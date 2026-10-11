@@ -1,0 +1,154 @@
+{
+  "Qwen/Qwen3-0.6B-Base": {
+    "generated": "2026-10-11T19:46:54+05:30",
+    "command": "python tasks.py vram-probe",
+    "model_id": "Qwen/Qwen3-0.6B-Base",
+    "revision": "da87bfb608c14b7cf20ba1ce41287e8de496c0cd",
+    "architecture": "Qwen3ForCausalLM",
+    "params": 596049920,
+    "dtype": "bf16",
+    "seq_len": 512,
+    "attn_implementation": "sdpa",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "total_vram_mib": 4095.5,
+    "in_use_before_load_mib": 807.8,
+    "weights_mib": 1136.9,
+    "frozen_forward": {
+      "1": {
+        "status": "fits",
+        "peak_allocated_mib": 1215.3,
+        "peak_reserved_mib": 1242.0,
+        "est_total_in_use_mib": 2049.8,
+        "seconds": 2.05
+      },
+      "4": {
+        "status": "fits",
+        "peak_allocated_mib": 1421.3,
+        "peak_reserved_mib": 1452.0,
+        "est_total_in_use_mib": 2259.8,
+        "seconds": 0.54
+      },
+      "8": {
+        "status": "fits",
+        "peak_allocated_mib": 1697.3,
+        "peak_reserved_mib": 1740.0,
+        "est_total_in_use_mib": 2547.8,
+        "seconds": 1.055
+      }
+    },
+    "lora_step": {
+      "config": {
+        "r": 16,
+        "alpha": 32,
+        "targets": "q,k,v,o_proj",
+        "gradient_checkpointing": true,
+        "optimizer": "AdamW",
+        "trainable_params": 4850177,
+        "adapter_dtype": "fp32",
+        "autocast": "bf16",
+        "head": "MLP 1024->256->1 over 17 marker positions"
+      },
+      "by_batch": {
+        "1": {
+          "status": "fits",
+          "peak_allocated_mib": 1247.8,
+          "peak_reserved_mib": 1294.0,
+          "est_total_in_use_mib": 2101.8,
+          "seconds": 7.095
+        },
+        "4": {
+          "status": "fits",
+          "peak_allocated_mib": 1493.0,
+          "peak_reserved_mib": 1590.0,
+          "est_total_in_use_mib": 2397.8,
+          "seconds": 1.956
+        },
+        "8": {
+          "status": "fits",
+          "peak_allocated_mib": 1775.8,
+          "peak_reserved_mib": 1898.0,
+          "est_total_in_use_mib": 2705.8,
+          "seconds": 2.86
+        }
+      }
+    },
+    "torch": "2.14.1+cu130",
+    "cuda": "13.0"
+  },
+  "Qwen/Qwen3.5-0.8B-Base": {
+    "generated": "2026-10-11T19:56:45+05:30",
+    "command": "python tasks.py vram-probe",
+    "model_id": "Qwen/Qwen3.5-0.8B-Base",
+    "revision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68",
+    "architecture": "Qwen3_5ForConditionalGeneration",
+    "params": 852985920,
+    "dtype": "bf16",
+    "seq_len": 512,
+    "attn_implementation": "sdpa",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "total_vram_mib": 4095.5,
+    "in_use_before_load_mib": 807.8,
+    "weights_mib": 1656.1,
+    "frozen_forward": {
+      "1": {
+        "status": "fits",
+        "peak_allocated_mib": 1748.2,
+        "peak_reserved_mib": 1812.0,
+        "est_total_in_use_mib": 2619.8,
+        "seconds": 1.491
+      },
+      "4": {
+        "status": "fits",
+        "peak_allocated_mib": 1994.7,
+        "peak_reserved_mib": 2084.0,
+        "est_total_in_use_mib": 2891.8,
+        "seconds": 0.863
+      },
+      "8": {
+        "status": "fits",
+        "peak_allocated_mib": 2323.3,
+        "peak_reserved_mib": 2466.0,
+        "est_total_in_use_mib": 3273.8,
+        "seconds": 1.612
+      }
+    },
+    "lora_step": {
+      "config": {
+        "r": 16,
+        "alpha": 32,
+        "targets": "q,k,v,o_proj",
+        "gradient_checkpointing": true,
+        "optimizer": "AdamW",
+        "trainable_params": 1344001,
+        "adapter_dtype": "fp32",
+        "autocast": "bf16",
+        "head": "MLP 1024->256->1 over 17 marker positions"
+      },
+      "by_batch": {
+        "1": {
+          "status": "fits",
+          "peak_allocated_mib": 1828.6,
+          "peak_reserved_mib": 1884.0,
+          "est_total_in_use_mib": 2691.8,
+          "seconds": 2.553
+        },
+        "4": {
+          "status": "fits",
+          "peak_allocated_mib": 2277.3,
+          "peak_reserved_mib": 2368.0,
+          "est_total_in_use_mib": 3175.8,
+          "seconds": 2.79
+        },
+        "8": {
+          "status": "fits",
+          "peak_allocated_mib": 2863.1,
+          "peak_reserved_mib": 2966.0,
+          "est_total_in_use_mib": 3773.8,
+          "seconds": 4.811
+        }
+      }
+    },
+    "torch": "2.14.1+cu130",
+    "cuda": "13.0"
+  }
+}

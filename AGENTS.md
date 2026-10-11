@@ -19,5 +19,7 @@ Project: learned, cost-aware GPU workload scheduling decision model (CLEF-style 
 ## Conventions
 - Python 3.11/3.12 in a venv (`.venv`, created by `python tasks.py setup`), pinned dependencies (`requirements.in` → lock in `requirements.txt` via `python tasks.py lock`), YAML configs, no hard-coded paths, type hints, pytest (+hypothesis for property tests).
 - Custom `heapq` discrete-event simulator (cheap snapshot/fork for rollouts), not SimPy.
+- Compute split: simulator, baselines and labeling are CPU-only and parallelized with `multiprocessing`; MLP and Qwen training/inference use the GPU. Model code gets its device only from `gde.runtime.resolve_device()` (`configs/runtime.yaml`: `auto | cuda | cpu`, CPU fallback); never hard-code `"cuda"`.
+- GPU is an RTX 3050 Laptop with 4 GB (see `docs/env.md`). Check measured VRAM there before choosing model size, batch size or LoRA settings.
 - Data lives under `data/` (gitignored); keep `SOURCES.md` + checksums per dataset.
 - Windows host: no GNU make. Commands: `python tasks.py test`, `python tasks.py data`, `python tasks.py baselines`, `python tasks.py label`, `python tasks.py bench`.

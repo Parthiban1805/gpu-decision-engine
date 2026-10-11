@@ -1,4 +1,14 @@
 # Top-level dependencies. Add new ones here, then run: python tasks.py lock
+# Lines starting with "--" are pip options and are copied into the lock file.
+#
+# torch: CUDA 13.0 wheel from the official PyTorch index (pytorch.org/get-started/locally,
+# Stable 2.14.1, Windows/pip offers cu126, cu130, cu132). The driver (592.00) supports up to
+# CUDA 13.1, so cu132 is too new; cu130 is the newest build the driver supports.
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.14.1+cu130
+transformers
+peft
+accelerate
 pytest
 hypothesis
 pyyaml
