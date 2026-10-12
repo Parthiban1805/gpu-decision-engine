@@ -5,7 +5,13 @@
 schedulers: [fifo, priority, sjf, edf, best_fit, easy_backfill]
 est_mode: stored
 overlay_shares: [0.0, 0.25]
-warmup_frac: 0.1            # initial-backlog exclusion check (capped-1h)
+warmup_fracs: [0.1, 0.25, 0.5]   # initial-backlog exclusion checks (capped-1h)
+
+clairvoyant:                 # Amendment 2, added analysis: NOT an online competitor
+  schedulers: [easy_backfill, sjf]
+  est_mode: oracle
+  rho: 0.8
+  overlay_share: 0.25
 
 cap_sensitivity:            # ranking stability ONLY; the 6 h cap is NOT re-picked
   caps_s: [10800, 21600, 43200]     # 3 h, 6 h (frozen), 12 h

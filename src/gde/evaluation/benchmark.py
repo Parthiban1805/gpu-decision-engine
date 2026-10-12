@@ -36,6 +36,8 @@ class Cell:
     rho: float
     overlay_share: float
     seed: int
+    est_mode: str | None = None  # None -> experiment default; 'oracle' = clairvoyant ablation
+    tag: str = ""        # e.g. 'clairvoyant'
 
 
 def load_regimes(path: Path | None = None) -> dict:
@@ -79,17 +81,18 @@ def make_overlay_cfg(raw_overlay: dict, share: float) -> OverlayConfig:
 
 
 def run_cell(cell: Cell, regimes: dict, overlay_raw: dict,
-             est_mode: str = "stored", warmup_frac: float = 0.1) -> dict:
+             est_mode: str = "stored", warmup_fracs: tuple[float, ...] = (0.1, 0.25, 0.5)) -> dict:
     """One (scheduler, regime, rho, overlay, seed) FIFO-compatible run.
 
-    Returns the summary plus a `warmup_trace` block recomputing trace-group
-    wait/deadline metrics excluding jobs submitted before warmup_frac * T_sim
-    (the warm-up exclusion check of the pre-registration)."""
+    Returns the summary plus `warmup` blocks recomputing trace-group
+    wait/deadline metrics excluding jobs submitted before frac * T_sim for
+    each requested warm-up fraction."""
     spec = regime_spec(regimes, cell.regime)
     cluster = ClusterSpec.from_yaml(CONFIGS / spec["cluster"])
     cap = spec.get("duration_cap_s")
+    est = cell.est_mode or est_mode
     trace_cfg = TraceConfig(
-        window_s=spec["window_s"], rho=cell.rho, est_mode=est_mode,
+        window_s=spec["window_s"], rho=cell.rho, est_mode=est,
         max_jobs=10**9, gpu_type=spec.get("gpu_type", "ignore"),
         duration_cap_s=float(cap) if cap else None,
     )
@@ -106,30 +109,32 @@ def run_cell(cell: Cell, regimes: dict, overlay_raw: dict,
     result = engine.run()
     wall = time.perf_counter() - t0
 
-    cutoff = warmup_frac * tman["t_sim_s"]
-    rows = [r for r in result.records.values()
-            if r.group == "trace" and r.submit_ts >= cutoff]
-    waits = sorted(r.wait_s for r in rows if r.wait_s is not None)
-    dl = [r for r in rows if r.job_type != "online_inference"]
-    warmup_trace = {
-        "n_jobs": len(rows),
-        "wait_s_p50": waits[len(waits) // 2] if waits else None,
-        "wait_s_p95": waits[min(int(0.95 * (len(waits) - 1)), len(waits) - 1)] if waits else None,
-        "deadline_miss_rate": (sum(1 for r in dl if r.deadline_met is False) / len(dl)) if dl else None,
-    }
+    warmup: dict[str, dict] = {}
+    for frac in warmup_fracs:
+        cutoff = frac * tman["t_sim_s"]
+        rows = [r for r in result.records.values()
+                if r.group == "trace" and r.submit_ts >= cutoff]
+        waits = sorted(r.wait_s for r in rows if r.wait_s is not None)
+        dl = [r for r in rows if r.job_type != "online_inference"]
+        warmup[str(frac)] = {
+            "n_jobs": len(rows),
+            "wait_s_p50": waits[len(waits) // 2] if waits else None,
+            "wait_s_p95": waits[min(int(0.95 * (len(waits) - 1)), len(waits) - 1)] if waits else None,
+            "deadline_miss_rate": (sum(1 for r in dl if r.deadline_met is False) / len(dl)) if dl else None,
+        }
     return {
         "cell": cell.__dict__, "trace_manifest": tman, "overlay_manifest": oman,
         "summary": result.summary, "digest": result.digest,
         "warnings": result.warnings, "wall_s": wall,
         "events": result.state.events_processed,
-        "warmup_trace": warmup_trace,
+        "warmup": warmup,
     }
 
 
 def run_cell_parallel(args: tuple) -> dict:
     """Top-level worker for ProcessPoolExecutor (Windows spawn-safe)."""
-    cell, regimes, overlay_raw, est_mode, warmup_frac = args
-    return run_cell(cell, regimes, overlay_raw, est_mode, warmup_frac)
+    cell, regimes, overlay_raw, est_mode, warmup_fracs = args
+    return run_cell(cell, regimes, overlay_raw, est_mode, warmup_fracs)
 
 
 # ---------------------------------------------------------------------------
@@ -146,20 +151,28 @@ def key_of(result: dict) -> tuple:
     return (c["regime"], c["rho"], c["overlay_share"], c["scheduler"], c["seed"])
 
 
-def aggregate(results: list[dict], use_warmup: bool = False) -> dict:
-    """Group by (regime, rho, overlay, scheduler); mean across paired seeds.
-    use_warmup=True swaps trace wait/deadline metrics for the warm-up-excluded
-    variants (P4 pre-registered check: do rankings change?)."""
+def group_key(result: dict) -> tuple:
+    """Aggregation key: clairvoyant/ablation cells never merge with stored runs."""
+    c = result["cell"]
+    return (c["regime"], c["rho"], c["overlay_share"], c["scheduler"],
+            c.get("est_mode") or "stored", c.get("tag") or "")
+
+
+def aggregate(results: list[dict], warmup_frac: float | None = None) -> dict:
+    """Group by (regime, rho, overlay, scheduler, est, tag); mean over paired
+    seeds. warmup_frac not None swaps trace wait/deadline metrics for that
+    warm-up exclusion variant (P4 pre-registered check: do rankings change?)."""
     grouped: dict[tuple, list[dict]] = {}
     for r in results:
-        grouped.setdefault(key_of(r)[:4], []).append(r)
+        grouped.setdefault(group_key(r), []).append(r)
     out: dict[tuple, dict] = {}
     for k, runs in grouped.items():
         g = [r["summary"]["groups"] for r in runs]
         cl = [r["summary"]["cluster"] for r in runs]
         trace = [x.get("trace", {}) for x in g]
-        if use_warmup:
-            trace = [dict(t, **r["warmup_trace"]) for t, r in zip(trace, runs)]
+        if warmup_frac is not None:
+            trace = [dict(t, **r["warmup"][str(warmup_frac)])
+                     for t, r in zip(trace, runs)]
         overlay = [x.get("overlay", {}) for x in g]
         out[k] = {
             "n_seeds": len(runs),
@@ -181,13 +194,93 @@ def aggregate(results: list[dict], use_warmup: bool = False) -> dict:
 
 
 def rank_by(agg: dict, regime: str, rho: float, overlay: float,
-            metric: str, lower_is_better: bool = True) -> list[tuple[str, float]]:
+            metric: str, est: str = "stored", tag: str = "",
+            lower_is_better: bool = True) -> list[tuple[str, float]]:
     rows = []
-    for (reg, r, ov, sched), m in agg.items():
-        if reg == regime and r == rho and ov == overlay and m.get(metric) is not None:
+    for key, m in agg.items():
+        (reg, r, ov, sched, k_est, k_tag) = key
+        if (reg, r, ov, k_est, k_tag) == (regime, rho, overlay, est, tag) \
+                and m.get(metric) is not None:
             rows.append((sched, m[metric]))
     rows.sort(key=lambda x: x[1], reverse=not lower_is_better)
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Amendment 2 (E): split/eligibility report for the seed lists
+# ---------------------------------------------------------------------------
+
+def window_eligibility(regimes: dict) -> dict:
+    """Per split-seed capped-1h window eligibility (Amendment-1 rule applies
+    at P6 sampling), the benchmark replacement seeds' split bands, and the
+    arrival-free trace prefix that makes early windows degenerate."""
+    import collections
+
+    cluster = ClusterSpec.from_yaml(CONFIGS / regimes["primary"]["cluster"])
+    path = DATA / "processed" / "alibaba2020.parquet"
+    cap = float(regimes["primary"]["duration_cap_s"])
+    cfg = TraceConfig(window_s=3600.0, rho=0.8, max_jobs=10**9, duration_cap_s=cap)
+
+    import pandas as pd
+    df = pd.read_parquet(path, columns=["submit_ts"])
+    t_min = float(df["submit_ts"].min())
+    t_max = float(df["submit_ts"].max())
+    span = t_max - t_min
+
+    def window_start_fraction(seed: int) -> float:
+        return float(np.random.default_rng(seed).uniform(0.0, span - 3600.0)) / span
+
+    def n_feasible(seed: int) -> int:
+        try:
+            jobs, _ = load_trace_window(path, cluster, cfg, seed=seed)
+            return len(jobs)
+        except ValueError:
+            return 0
+
+    splits = {}
+    for split, seeds in regimes["splits"]["split_seeds"].items():
+        counts = [n_feasible(s) for s in seeds]
+        splits[split] = {
+            "n_seeds": len(seeds),
+            "n_degenerate": sum(1 for c in counts if c == 0),
+            "min_feasible": min(counts),
+        }
+
+    bands = regimes["splits"]["window_bands"]
+
+    def band_of(seed: int) -> str:
+        f = window_start_fraction(seed)
+        for name, (lo, hi) in bands.items():
+            if lo <= f < hi:
+                return name
+        return "test" if f >= bands["test"][0] else "train"
+
+    replacements = {}
+    for orig, repl in ((31001, 31501), (31006, 31506)):
+        replacements[f"{orig}->{repl}"] = {
+            "orig_band": band_of(orig), "repl_band": band_of(repl),
+            "repl_feasible_jobs": n_feasible(repl),
+        }
+
+    # arrival-free prefix: first trailing day from t_min whose hourly count
+    # stays under 1 job/h in every hour of that day
+    submits = df["submit_ts"].to_numpy()
+    day = 86400.0
+    prefix_days = 0
+    while prefix_days * day < span:
+        lo = t_min + prefix_days * day
+        hi = lo + day
+        n = int(((submits >= lo) & (submits < hi)).sum())
+        if n >= 24:  # at least ~1 job/hour somewhere -> no longer arrival-free
+            break
+        prefix_days += 1
+    return {
+        "splits": splits,
+        "replacement_seeds": replacements,
+        "arrival_free_prefix_days": prefix_days,
+        "arrival_free_prefix_span_fraction": prefix_days * day / span,
+        "note": "benchmark seeds are not split-assigned; splits use their own seed lists",
+    }
 
 
 # ---------------------------------------------------------------------------

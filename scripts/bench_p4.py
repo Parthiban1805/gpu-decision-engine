@@ -26,6 +26,7 @@ from gde.evaluation.benchmark import (
     rank_by,
     rollout_straddle_fraction,
     run_cell_parallel,
+    window_eligibility,
 )
 from gde.ingestion.synthetic import SyntheticConfig, generate_workload
 from gde.paths import CONFIGS, DATA, REPORTS
@@ -43,7 +44,8 @@ def _fmt(x, digits=3):
 
 
 def _run_cells(cells, regimes, overlay_raw, cfg, workers):
-    args = [(c, regimes, overlay_raw, cfg["est_mode"], cfg["warmup_frac"]) for c in cells]
+    args = [(c, regimes, overlay_raw, cfg["est_mode"], tuple(cfg["warmup_fracs"]))
+            for c in cells]
     if workers > 1:
         with ProcessPoolExecutor(max_workers=workers) as pool:
             return list(pool.map(run_cell_parallel, args))
@@ -58,10 +60,10 @@ def _main_table(agg, regime, rho, overlay, lines):
                  "DL miss | SLO miss(ov) | makespan d | frag |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
     rows = {k: v for k, v in agg.items()
-            if k[0] == regime and k[1] == rho and k[2] == overlay}
-    for (reg, r, ov, sched), m in sorted(rows.items(), key=lambda kv: kv[1]["trace_wait_p50_s"]):
+            if (k[0], k[1], k[2], k[4], k[5]) == (regime, rho, overlay, "stored", "")}
+    for key, m in sorted(rows.items(), key=lambda kv: kv[1]["trace_wait_p50_s"]):
         lines.append(
-            f"| {sched} | {_fmt(m['util_aw'])} | {_fmt(m['realized_rho_trace'])} "
+            f"| {key[3]} | {_fmt(m['util_aw'])} | {_fmt(m['realized_rho_trace'])} "
             f"| {_fmt((m['trace_wait_p50_s'] or 0) / 3600, 2)} "
             f"| {_fmt((m['trace_wait_p95_s'] or 0) / 3600, 2)} "
             f"| {_fmt(m['trace_dl_miss'])} | {_fmt(m['ov_slo_miss'])} "
@@ -173,7 +175,6 @@ def main() -> None:
         raise SystemExit(f"cells with warnings (deadlock/guard): {[r['cell'] for r in bad]}")
 
     agg = aggregate(results)
-    agg_warm = aggregate(results, use_warmup=True)
 
     lines.append("## Main comparison (rho 0.8)")
     lines.append("")
@@ -185,15 +186,55 @@ def main() -> None:
     lines.append("")
     lines.append("| scheduler | util(AW) | wait p50 h | wait p95 h | DL miss | SLO miss(ov) | makespan d |")
     lines.append("|---|---|---|---|---|---|---|")
-    for (reg, r, ov, sched), m in sorted(
-            ((k, v) for k, v in agg.items() if k[0] == "uncapped-1h"),
+    for key, m in sorted(
+            ((k, v) for k, v in agg.items()
+             if (k[0], k[4], k[5]) == ("uncapped-1h", "stored", "")),
             key=lambda kv: kv[1]["trace_wait_p50_s"]):
         lines.append(
-            f"| {sched} | {_fmt(m['util_aw'])} "
+            f"| {key[3]} | {_fmt(m['util_aw'])} "
             f"| {_fmt((m['trace_wait_p50_s'] or 0) / 3600, 2)} "
             f"| {_fmt((m['trace_wait_p95_s'] or 0) / 3600, 2)} "
             f"| {_fmt(m['trace_dl_miss'])} | {_fmt(m['ov_slo_miss'])} "
             f"| {_fmt((m['makespan_s'] or 0) / 86400, 2)} |")
+    lines.append("")
+
+    # ---- clairvoyant ablation (Amendment 2, added analysis) -----------------
+    lines.append("## Clairvoyant ablation — regime: capped-1h (rho 0.8, overlay 25%)")
+    lines.append("")
+    lines.append("*EASY and SJF re-run with ORACLE estimates (runtime_est = actual). "
+                 "Labeled **clairvoyant**: an ablation isolating estimate quality, "
+                 "NOT an online competitor — oracle estimates are not available at "
+                 "decision time. Question (Amendment 2): does EASY's gap to the "
+                 "reordering policies close when its reservations are exact?*")
+    lines.append("")
+    cv_cells = [Cell(s, "capped-1h", 0.8, 0.25, seed, est_mode="oracle", tag="clairvoyant")
+                for s in cfg["clairvoyant"]["schedulers"] for seed in seeds]
+    print(f"clairvoyant: {len(cv_cells)} cells", flush=True)
+    results_cv = _run_cells(cv_cells, regimes, overlay_raw, cfg, workers)
+    bad_cv = [r for r in results_cv if r["warnings"]]
+    if bad_cv:
+        raise SystemExit(f"clairvoyant cells with warnings: {[r['cell'] for r in bad_cv]}")
+    agg_cv = aggregate(results_cv)
+    results_all = results + results_cv
+    agg_all = aggregate(results_all)
+
+    lines.append("| scheduler | estimates | util(AW) | wait p50 h | wait p95 h | DL miss | SLO miss(ov) |")
+    lines.append("|---|---|---|---|---|---|---|")
+    for sched in ["easy_backfill", "sjf"]:
+        for est_label, key in (("stored", ("capped-1h", 0.8, 0.25, sched, "stored", "")),
+                               ("oracle (clairvoyant)", ("capped-1h", 0.8, 0.25, sched, "oracle", "clairvoyant"))):
+            m = agg_all[key]
+            lines.append(
+                f"| {sched} | {est_label} | {_fmt(m['util_aw'])} "
+                f"| {_fmt((m['trace_wait_p50_s'] or 0) / 3600, 2)} "
+                f"| {_fmt((m['trace_wait_p95_s'] or 0) / 3600, 2)} "
+                f"| {_fmt(m['trace_dl_miss'])} | {_fmt(m['ov_slo_miss'])} |")
+    m_edf = agg_all[("capped-1h", 0.8, 0.25, "edf", "stored", "")]
+    lines.append(
+        f"| edf (reference) | stored | {_fmt(m_edf['util_aw'])} "
+        f"| {_fmt((m_edf['trace_wait_p50_s'] or 0) / 3600, 2)} "
+        f"| {_fmt((m_edf['trace_wait_p95_s'] or 0) / 3600, 2)} "
+        f"| {_fmt(m_edf['trace_dl_miss'])} | {_fmt(m_edf['ov_slo_miss'])} |")
     lines.append("")
 
     # ---- rho sweep (primary only) -----------------------------------------
@@ -202,12 +243,12 @@ def main() -> None:
     lines.append("| scheduler | rho | util(AW) | wait p50 h | DL miss | SLO miss(ov) | makespan d |")
     lines.append("|---|---|---|---|---|---|---|")
     for rho in primary_rhos:
-        for (reg, r, ov, sched), m in sorted(
+        for key, m in sorted(
                 ((k, v) for k, v in agg.items()
-                 if k[0] == "capped-1h" and k[1] == rho and k[2] == 0.25),
-                key=lambda kv: (kv[0][3])):
+                 if (k[0], k[1], k[2], k[4], k[5]) == ("capped-1h", rho, 0.25, "stored", "")),
+                key=lambda kv: kv[0][3]):
             lines.append(
-                f"| {sched} | {rho} | {_fmt(m['util_aw'])} "
+                f"| {key[3]} | {rho} | {_fmt(m['util_aw'])} "
                 f"| {_fmt((m['trace_wait_p50_s'] or 0) / 3600, 2)} "
                 f"| {_fmt(m['trace_dl_miss'])} | {_fmt(m['ov_slo_miss'])} "
                 f"| {_fmt((m['makespan_s'] or 0) / 86400, 2)} |")
@@ -257,27 +298,33 @@ def main() -> None:
                      f"{'YES' if same else 'NO'} |")
     lines.append("")
 
-    # ---- warm-up check ------------------------------------------------------
+    # ---- warm-up check at 10/25/50% exclusion -------------------------------
     lines.append("## Warm-up exclusion check — regime: capped-1h (rho 0.8, overlay 25%)")
     lines.append("")
-    lines.append(f"Metrics exclude jobs submitted in the first {int(cfg['warmup_frac'] * 100)}% "
-                 "of the arrival window (initial backlog/warm-up).")
+    lines.append("Metrics exclude jobs submitted in the first 10% / 25% / 50% of the "
+                 "arrival window (initial backlog / warm-up).")
     lines.append("")
-    lines.append("| scheduler | wait p50 h (all) | wait p50 h (warm-excl) | DL miss (all) | DL miss (warm-excl) |")
-    lines.append("|---|---|---|---|---|")
+    warm_aggs = {frac: aggregate(results, warmup_frac=frac) for frac in cfg["warmup_fracs"]}
     rank_all = ranking_of(agg, "capped-1h", 0.8, 0.25, "trace_wait_p50_s")
-    rank_warm = ranking_of(agg_warm, "capped-1h", 0.8, 0.25, "trace_wait_p50_s")
+    lines.append("| scheduler | wait p50 h (all) | " +
+                 " | ".join(f"p50 h (excl {int(f * 100)}%)" for f in cfg["warmup_fracs"]) +
+                 " | DL miss (all) | " +
+                 " | ".join(f"DL ({int(f * 100)}%)" for f in cfg["warmup_fracs"]) + " |")
+    lines.append("|---|" + "---|" * (2 * len(cfg["warmup_fracs"]) + 2))
     for sched in schedulers:
-        m = agg[("capped-1h", 0.8, 0.25, sched)]
-        mw = agg_warm[("capped-1h", 0.8, 0.25, sched)]
-        lines.append(
-            f"| {sched} | {_fmt((m['trace_wait_p50_s'] or 0) / 3600, 2)} "
-            f"| {_fmt((mw['trace_wait_p50_s'] or 0) / 3600, 2)} "
-            f"| {_fmt(m['trace_dl_miss'])} | {_fmt(mw['trace_dl_miss'])} |")
+        key = ("capped-1h", 0.8, 0.25, sched, "stored", "")
+        cells = [_fmt((agg[key]["trace_wait_p50_s"] or 0) / 3600, 2)]
+        cells += [_fmt((warm_aggs[f][key]["trace_wait_p50_s"] or 0) / 3600, 2)
+                  for f in cfg["warmup_fracs"]]
+        cells += [_fmt(agg[key]["trace_dl_miss"])]
+        cells += [_fmt(warm_aggs[f][key]["trace_dl_miss"]) for f in cfg["warmup_fracs"]]
+        lines.append(f"| {sched} | " + " | ".join(cells) + " |")
     lines.append("")
-    lines.append(f"Ranking by wait p50 unchanged after warm-up exclusion: "
-                 f"**{'YES' if rank_all == rank_warm else 'NO'}** "
-                 f"(all: {' > '.join(rank_all)}; warm-excl: {' > '.join(rank_warm)}).")
+    for frac in cfg["warmup_fracs"]:
+        rank_f = ranking_of(warm_aggs[frac], "capped-1h", 0.8, 0.25, "trace_wait_p50_s")
+        lines.append(f"- Ranking by wait p50 at {int(frac * 100)}% exclusion unchanged "
+                     f"vs no exclusion: **{'YES' if rank_f == rank_all else 'NO'}** "
+                     f"({', '.join(rank_f)})")
     lines.append("")
 
     # ---- straddle / horizon claim correction (step 6) ------------------------
@@ -345,11 +392,42 @@ def main() -> None:
                  "scoped to capped-1h. Stress track is held out from P6 labeling.")
     lines.append("")
 
+    # ---- Amendment 2 (E): split + window eligibility -------------------------
+    elig = window_eligibility(regimes)
+    lines.append("## Split and window eligibility (Amendment 2E)")
+    lines.append("")
+    lines.append(f"- Arrival-free trace prefix: **{elig['arrival_free_prefix_days']} days** "
+                 f"({100 * elig['arrival_free_prefix_span_fraction']:.1f}% of the trace span). "
+                 "Any 1 h window sampled there is degenerate; the prefix lies entirely "
+                 "inside the TRAIN band [0, 0.6), so val/test bands are unaffected.")
+    lines.append("- Split-seed capped-1h window eligibility (Amendment-1 rule applies "
+                 "at P6 sampling, replacements logged):")
+    lines.append("")
+    lines.append("| split | seeds | degenerate (0 feasible) | min feasible jobs |")
+    lines.append("|---|---|---|---|")
+    for split, s in elig["splits"].items():
+        lines.append(f"| {split} | {s['n_seeds']} | {s['n_degenerate']} | {s['min_feasible']} |")
+    lines.append("")
+    lines.append("- Replacement seeds vs their originals (window band = position of "
+                 "window start as a fraction of trace span):")
+    lines.append("")
+    lines.append("| replacement | original band | replacement band | feasible jobs |")
+    lines.append("|---|---|---|---|")
+    for repl, info in elig["replacement_seeds"].items():
+        lines.append(f"| {repl} | {info['orig_band']} | {info['repl_band']} "
+                     f"| {info['repl_feasible_jobs']} |")
+    lines.append("")
+    lines.append("Benchmark seeds are NOT split-assigned (splits use their own seed "
+                 "lists), so the band move train→test of the two replacements does "
+                 "not contaminate any split; it is disclosed for completeness.")
+    lines.append("")
+
     wall_total = time.perf_counter() - t_start
-    total_events = sum(r["events"] for r in results)
+    total_events = sum(r["events"] for r in results_all)
     lines.append("## Cost")
     lines.append("")
-    lines.append(f"- {len(results)} main-matrix cells + {sensitivity_cells_run} "
+    lines.append(f"- {len(results_all)} cells ({len(results)} main-matrix + "
+                 f"{len(results_cv)} clairvoyant) + {sensitivity_cells_run} "
                  f"sensitivity cells; {total_events:,} events total; total wall "
                  f"{wall_total / 60:.1f} min (workers={workers}, CPU-only).")
     lines.append("")
@@ -359,12 +437,14 @@ def main() -> None:
     out_md.parent.mkdir(parents=True, exist_ok=True)
     out_md.write_text("\n".join(lines), encoding="utf-8")
     json.dump({
-        "aggregate": {"/".join(map(str, k)): v for k, v in agg.items()},
-        "aggregate_warmup": {"/".join(map(str, k)): v for k, v in agg_warm.items()},
+        "aggregate": {"/".join(map(str, k)): v for k, v in agg_all.items()},
+        "warmup": {str(f): {"/".join(map(str, k)): v for k, v in a.items()}
+                   for f, a in warm_aggs.items()},
         "cap_sensitivity": {str(c): {"/".join(map(str, k)): v for k, v in a.items()}
                             for c, a in cap_results.items()},
         "sanity": sc, "straddle": straddle_raw, "stability": stability,
-        "cells": len(results), "wall_min": wall_total / 60,
+        "eligibility": elig,
+        "cells": len(results_all), "wall_min": wall_total / 60,
     }, open(out_json, "w", encoding="utf-8"), indent=2, default=str)
     print(f"report: {out_md}")
     if not sc["pass"]:

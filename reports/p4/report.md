@@ -1,6 +1,6 @@
 # P4 — heuristic baselines on the pre-registered regimes
 
-Generated 2026-10-12T20:31:59 by `python tasks.py baselines`. Regimes: `configs/regimes.yaml` (FROZEN, pre-registered in `reports/sim/regime_prereg.md` before any P4 result). Schedulers: fifo, priority, sjf, edf, best_fit, easy_backfill. Paired seeds (Amendment 1): [31501, 31002, 31003, 31004, 31005, 31506, 31007, 31008, 31009, 31010]. Est mode: stored.
+Generated 2026-10-12T21:01:09 by `python tasks.py baselines`. Regimes: `configs/regimes.yaml` (FROZEN, pre-registered in `reports/sim/regime_prereg.md` before any P4 result). Schedulers: fifo, priority, sjf, edf, best_fit, easy_backfill. Paired seeds (Amendment 1): [31501, 31002, 31003, 31004, 31005, 31506, 31007, 31008, 31009, 31010]. Est mode: stored.
 
 **Headline disclosures (binding):** on capped-1h, **64% of offered work is excluded by the 6 h duration cap** (measured, `reports/sim/p3b_regime.md`); **deadlines/SLOs/VRAM are synthetic** for all trace jobs; `batch_inference` is a **short-small proxy** (derived, ≤600 s & ≤0.5 GPU, not tuned); overlay jobs are fully synthetic. Every table below carries its regime tag.
 
@@ -61,6 +61,18 @@ Generated 2026-10-12T20:31:59 by `python tasks.py baselines`. Regimes: `configs/
 | easy_backfill | 0.598 | 9.04 | 43.59 | 0.618 | 0.615 | 8.56 |
 | fifo | 0.571 | 20.24 | 58.19 | 0.744 | 0.765 | 8.92 |
 
+## Clairvoyant ablation — regime: capped-1h (rho 0.8, overlay 25%)
+
+*EASY and SJF re-run with ORACLE estimates (runtime_est = actual). Labeled **clairvoyant**: an ablation isolating estimate quality, NOT an online competitor — oracle estimates are not available at decision time. Question (Amendment 2): does EASY's gap to the reordering policies close when its reservations are exact?*
+
+| scheduler | estimates | util(AW) | wait p50 h | wait p95 h | DL miss | SLO miss(ov) |
+|---|---|---|---|---|---|---|
+| easy_backfill | stored | 0.712 | 4.82 | 16.58 | 0.650 | 0.658 |
+| easy_backfill | oracle (clairvoyant) | 0.733 | 0.87 | 12.31 | 0.439 | 0.362 |
+| sjf | stored | 0.716 | 0.14 | 11.94 | 0.310 | 0.279 |
+| sjf | oracle (clairvoyant) | 0.717 | 0.08 | 9.81 | 0.269 | 0.255 |
+| edf (reference) | stored | 0.722 | 0.10 | 12.09 | 0.312 | 0.274 |
+
 ## rho sweep — regime: capped-1h (overlay 25%)
 
 | scheduler | rho | util(AW) | wait p50 h | DL miss | SLO miss(ov) | makespan d |
@@ -106,18 +118,20 @@ Generated 2026-10-12T20:31:59 by `python tasks.py baselines`. Regimes: `configs/
 
 ## Warm-up exclusion check — regime: capped-1h (rho 0.8, overlay 25%)
 
-Metrics exclude jobs submitted in the first 10% of the arrival window (initial backlog/warm-up).
+Metrics exclude jobs submitted in the first 10% / 25% / 50% of the arrival window (initial backlog / warm-up).
 
-| scheduler | wait p50 h (all) | wait p50 h (warm-excl) | DL miss (all) | DL miss (warm-excl) |
-|---|---|---|---|---|
-| fifo | 12.05 | 12.91 | 0.765 | 0.814 |
-| priority | 0.25 | 0.26 | 0.353 | 0.361 |
-| sjf | 0.14 | 0.17 | 0.310 | 0.318 |
-| edf | 0.10 | 0.11 | 0.312 | 0.324 |
-| best_fit | 1.43 | 1.45 | 0.350 | 0.354 |
-| easy_backfill | 4.82 | 5.72 | 0.650 | 0.689 |
+| scheduler | wait p50 h (all) | p50 h (excl 10%) | p50 h (excl 25%) | p50 h (excl 50%) | DL miss (all) | DL (10%) | DL (25%) | DL (50%) |
+|---|---|---|---|---|---|---|---|---|
+| fifo | 12.05 | 12.91 | 14.63 | 13.55 | 0.765 | 0.814 | 0.833 | 0.811 |
+| priority | 0.25 | 0.26 | 0.30 | 0.39 | 0.353 | 0.361 | 0.340 | 0.281 |
+| sjf | 0.14 | 0.17 | 0.15 | 0.20 | 0.310 | 0.318 | 0.289 | 0.271 |
+| edf | 0.10 | 0.11 | 0.10 | 0.21 | 0.312 | 0.324 | 0.310 | 0.300 |
+| best_fit | 1.43 | 1.45 | 1.46 | 1.44 | 0.350 | 0.354 | 0.335 | 0.294 |
+| easy_backfill | 4.82 | 5.72 | 6.70 | 5.17 | 0.650 | 0.689 | 0.695 | 0.627 |
 
-Ranking by wait p50 unchanged after warm-up exclusion: **YES** (all: edf > sjf > priority > best_fit > easy_backfill > fifo; warm-excl: edf > sjf > priority > best_fit > easy_backfill > fifo).
+- Ranking by wait p50 at 10% exclusion unchanged vs no exclusion: **YES** (edf, sjf, priority, best_fit, easy_backfill, fifo)
+- Ranking by wait p50 at 25% exclusion unchanged vs no exclusion: **YES** (edf, sjf, priority, best_fit, easy_backfill, fifo)
+- Ranking by wait p50 at 50% exclusion unchanged vs no exclusion: **NO** (sjf, edf, priority, best_fit, easy_backfill, fifo)
 
 ## Horizon clarification (P3b claim correction)
 
@@ -145,6 +159,26 @@ The 6 h cap shifts the mix toward short jobs (proxy share rises from 12.8% uncap
 - All trace-derived fields carry P2 provenance (VRAM derived/synthetic; job_type derived; priority/deadline synthetic; runtime_est derived, MdAPE 45.3%). Overlay fields fully synthetic.
 - Any 'scheduler X wins' statement below must hold on stress-24h or is scoped to capped-1h. Stress track is held out from P6 labeling.
 
+## Split and window eligibility (Amendment 2E)
+
+- Arrival-free trace prefix: **5 days** (7.3% of the trace span). Any 1 h window sampled there is degenerate; the prefix lies entirely inside the TRAIN band [0, 0.6), so val/test bands are unaffected.
+- Split-seed capped-1h window eligibility (Amendment-1 rule applies at P6 sampling, replacements logged):
+
+| split | seeds | degenerate (0 feasible) | min feasible jobs |
+|---|---|---|---|
+| train | 30 | 4 | 0 |
+| val | 10 | 1 | 0 |
+| test | 10 | 1 | 0 |
+
+- Replacement seeds vs their originals (window band = position of window start as a fraction of trace span):
+
+| replacement | original band | replacement band | feasible jobs |
+|---|---|---|---|
+| 31001->31501 | train | test | 485 |
+| 31006->31506 | train | test | 361 |
+
+Benchmark seeds are NOT split-assigned (splits use their own seed lists), so the band move train→test of the two replacements does not contaminate any split; it is disclosed for completeness. (benchmark seeds are not split-assigned; splits use their own seed lists)
+
 ## Cost
 
-- 480 main-matrix cells + 180 sensitivity cells; 8,693,550 events total; total wall 4.9 min (workers=7, CPU-only).
+- 500 cells (480 main-matrix + 20 clairvoyant) + 180 sensitivity cells; 8,754,190 events total; total wall 5.1 min (workers=7, CPU-only).
