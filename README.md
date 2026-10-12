@@ -11,6 +11,7 @@ python tasks.py setup         # create .venv, install pinned requirements.txt + 
 python tasks.py hwcheck       # write docs/env.md (GPU / torch check)
 python tasks.py data          # download traces per their READMEs -> data/raw/, docs/data_dictionary.md
 python tasks.py eda           # per-dataset summary stats -> reports/eda/p1_summary.md
+python tasks.py normalize     # P2: unified job Parquet -> data/processed/, cleaning report
 python tasks.py download-qwen # download pinned Qwen backbone -> data/models/, verify on GPU
 python tasks.py test          # CI-style check: venv version, pip check, pytest
 python tasks.py help          # list all targets

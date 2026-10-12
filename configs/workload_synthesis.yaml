@@ -1,0 +1,38 @@
+# Synthetic/derived field parameters (PLAN.md §2.2-§2.4). Every report must echo these.
+# Deadlines/SLOs do not exist in any of the three traces -> synthetic, per-dataset seeded.
+# VRAM exists in no trace (Alibaba gives GPU share %; Helios nothing) -> derived for
+# fractional-share jobs, seeded Beta sample for whole-GPU jobs.
+
+seeds:                       # one deterministic stream per dataset
+  alibaba2020: 20200001
+  alibaba2023: 20230001
+  helios_earth: 20210101
+  helios_saturn: 20210102
+  helios_uranus: 20210103
+  helios_venus: 20210104
+
+deadline_slack:              # deadline = submit + slack * duration (training / batch_inference)
+  training: {dist: loguniform, min: 2.0, max: 10.0}
+  batch_inference: {dist: loguniform, min: 1.5, max: 4.0}
+online_inference:            # SLO is a max queue wait, not a deadline multiple
+  slo_s_choices: [1, 2, 5, 10]
+  load_s: 0.0
+
+vram:
+  # VRAM capacity per GPU type in GB. ASSUMPTION (model constants, not trace data):
+  # the V100M16/M32 suffixes are explicit; MISC/G2/G3 unknown -> default.
+  gpu_mem_gb: {T4: 16, P100: 16, V100: 32, V100M16: 16, V100M32: 32, A10: 24, MISC: 16, G2: 16, G3: 16}
+  default_mem_gb: 16.0
+  # Whole-GPU jobs: fraction of per-GPU capacity ~ Beta(alpha, beta), clipped to [min_frac, 1]
+  beta: {alpha: 4.0, beta: 2.0, min_frac: 0.1}
+
+job_type_heuristic:          # no trace has a train/inference label (PLAN §2.2) -> derived
+  short_job_s: 600.0         # duration <= this AND num_gpus <= small_gpu -> batch_inference
+  small_gpu: 0.5
+  default: training
+  # online_inference is never produced from these traces; it exists only in the
+  # synthetic generator (P3). Disclosed in every report.
+
+priority:                    # 1..10 (derived where trace has a class, synthetic default otherwise)
+  default: 5
+  alibaba2023_qos: {LS: 8, Burstable: 5, Guaranteed: 9, BE: 2}

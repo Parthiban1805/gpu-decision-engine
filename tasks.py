@@ -113,6 +113,11 @@ def task_eda(args: list[str]) -> None:
     run([require_venv(), ROOT / "scripts" / "eda.py", *args])
 
 
+def task_normalize(args: list[str]) -> None:
+    """P2: raw traces -> unified Parquet (data/processed/) + cleaning report."""
+    run([require_venv(), ROOT / "scripts" / "normalize.py", *args])
+
+
 def task_test(args: list[str]) -> None:
     """CI-style check: interpreter version, dependency consistency, pytest."""
     py = require_venv()
@@ -140,6 +145,7 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "test": task_test,
     "data": task_data,
     "eda": task_eda,
+    "normalize": task_normalize,
     "sim-smoke": not_implemented("P3"),
     "baselines": not_implemented("P4"),
     "label": not_implemented("P6"),
