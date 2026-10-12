@@ -16,6 +16,13 @@ Project: learned, cost-aware GPU workload scheduling decision model (CLEF-style 
 - Never state a result that wasn't produced by a re-runnable command. OR-Tools results are an optimum only if solved to proven optimality; they are clairvoyant references, not online competitors.
 - Never guess dataset URLs or column names: read each dataset's README/schema and record findings in `docs/data_dictionary.md`. If a download fails, log it and continue.
 
+## Benchmark regimes (pre-registered, FROZEN — `configs/regimes.yaml`, `reports/sim/regime_prereg.md`)
+- PRIMARY `capped-1h`: alibaba2020, cluster_small, 1 h windows, 6 h duration-cap filter (inside the window, before time-scaling, drops logged), ρ sweep {0.6, 0.8, 0.95, 1.1} here only; P6 horizon n_arrivals=20 binds (max_seconds 86400).
+- STRESS `stress-24h`: P3 smoke regime (24 h, uncapped), ρ 0.8, in every phase; horizon max_seconds=3600. Held out from labeling/DAgger from P6 onward.
+- Cap (6 h) and window lengths are frozen; do not change them after seeing scheduler results. Benchmark seeds 31001–31010 (paired); split seeds in the config.
+- Every table/plot carries a regime tag. Headlines state "64% of offered work excluded by the 6 h cap" and "deadlines/SLOs/VRAM are synthetic". A "scheduler X wins" claim must hold on stress-24h or be scoped to capped-1h.
+- P7 gate: V1 must beat the best heuristic on the primary TEST split AND be no worse than the best heuristic on the stress track (paired bootstrap 95% CI; both reported).
+
 ## Conventions
 - Python 3.11/3.12 in a venv (`.venv`, created by `python tasks.py setup`), pinned dependencies (`requirements.in` → lock in `requirements.txt` via `python tasks.py lock`), YAML configs, no hard-coded paths, type hints, pytest (+hypothesis for property tests).
 - Custom `heapq` discrete-event simulator (cheap snapshot/fork for rollouts), not SimPy.

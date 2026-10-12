@@ -1,0 +1,84 @@
+# =============================================================================
+# Pre-registered benchmark regimes (P3b decision, approved 2026-10-12).
+#
+# FROZEN at the commit that introduces this file: the cap (6 h) and the window
+# lengths (1 h primary / 24 h stress) MUST NOT change after any scheduler
+# result has been seen. Schedulers, metrics and analysis may be ADDED, never
+# re-picked post hoc. Human-readable pre-registration: reports/sim/regime_prereg.md
+# =============================================================================
+
+version: 1
+frozen:
+  primary_window_s: 3600          # 1 h
+  stress_window_s: 86400          # 24 h
+  duration_cap_s: 21600           # 6 h, primary only (filter inside the window, before time-scaling)
+  stress_rho: 0.8
+
+primary:
+  name: capped-1h
+  dataset: alibaba2020
+  parquet: data/processed/alibaba2020.parquet
+  cluster: cluster_small.yaml
+  window_s: 3600
+  duration_cap_s: 21600
+  rho_sweep: [0.6, 0.8, 0.95, 1.1]   # load sweep runs on PRIMARY only
+  rho_default: 0.8
+  gpu_type: ignore
+  # P6 rollout horizon: n_arrivals binds; max_seconds raised so it cannot bind
+  # first (capped-1h inter-arrival ~928 s => 20 arrivals ~5.2 h < 24 h).
+  horizon: {n_arrivals: 20, max_seconds: 86400, terminal_penalty: true}
+
+stress:
+  name: stress-24h
+  dataset: alibaba2020
+  parquet: data/processed/alibaba2020.parquet
+  cluster: cluster_small.yaml
+  window_s: 86400
+  duration_cap_s: null            # uncapped: whales retained
+  rho: [0.8]
+  horizon: {n_arrivals: 20, max_seconds: 3600, terminal_penalty: true}   # PLAN Appendix A base value kept
+
+optional_cell:                    # P3b option B, cheap, reported with its own tag
+  name: uncapped-1h
+  window_s: 3600
+  duration_cap_s: null
+  rho: [0.8]
+
+# Paired benchmark seeds: every scheduler runs the SAME seeded workload
+# instances. Disjoint from the P3b diagnostic seeds 30001/30002.
+benchmark_seeds: [31001, 31002, 31003, 31004, 31005, 31006, 31007, 31008, 31009, 31010]
+
+splits:                           # for P6 labeling / P7 training, defined now
+  method: chronological at the WINDOW level, no window overlap
+  window_bands:                   # a window belongs to a split by its start as a fraction of trace span
+    train: [0.0, 0.6]
+    val: [0.6, 0.8]
+    test: [0.8, 1.0]
+  split_seeds:                    # disjoint from each other and from benchmark seeds
+    train: [31101, 31102, 31103, 31104, 31105, 31106, 31107, 31108, 31109, 31110,
+            31111, 31112, 31113, 31114, 31115, 31116, 31117, 31118, 31119, 31120,
+            31121, 31122, 31123, 31124, 31125, 31126, 31127, 31128, 31129, 31130]
+    val:   [31201, 31202, 31203, 31204, 31205, 31206, 31207, 31208, 31209, 31210]
+    test:  [31301, 31302, 31303, 31304, 31305, 31306, 31307, 31308, 31309, 31310]
+  cross_trace:
+    dataset: helios (helios_earth first; other clusters as available)
+    rule: apply the same 6 h cap and report it; ALSO report uncapped
+
+p6_labeling:
+  tracks: [primary]               # stress-24h is HELD OUT from labeling/DAgger from P6 onward
+
+p7_gate:
+  statement: >
+    V1 must (a) BEAT the best heuristic on the primary TEST split and
+    (b) be NO WORSE than the best heuristic on the stress track. Both reported.
+  metric: mean objective J, balanced preset (PLAN.md 5.1), lower is better
+  beat: paired bootstrap 95% CI of (J_V1 - J_best_heuristic) excludes zero on the favorable side
+  no_worse: paired bootstrap 95% CI includes zero or favors V1
+
+reporting_rules:
+  - every table and plot carries a regime tag (capped-1h / stress-24h / uncapped-1h)
+  - 'headline must state: "64% of offered work excluded by the 6 h cap" (measured on the
+    smoke window, reports/sim/p3b_regime.md) and "deadlines/SLOs/VRAM are synthetic"'
+  - report the training / batch_inference (short-small proxy) / online_inference mix per regime
+  - any "scheduler X wins" claim must hold on stress-24h or be explicitly scoped to capped-1h
+  - stress-24h is held out for labeling from P6 onward
