@@ -1,5 +1,7 @@
 # Compute device for model training and inference (MLP, Qwen scorer, API).
-# auto: cuda if available, else cpu. cuda: falls back to cpu with a warning if CUDA is unavailable.
+# cuda: this machine's GPU (see docs/env.md for the measured card and VRAM).
+# resolve_device() falls back to cpu with a warning if CUDA is unavailable;
+# auto would also pick cuda when present.
 # Override per run with the GDE_DEVICE environment variable.
 # Simulator, baselines and labeling never use this: they are CPU-only and parallelized with multiprocessing.
-device: auto   # auto | cuda | cpu
+device: cuda   # auto | cuda | cpu

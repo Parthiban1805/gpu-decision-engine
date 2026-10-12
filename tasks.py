@@ -96,6 +96,11 @@ def task_vram_probe(args: list[str]) -> None:
     run([py, ROOT / "scripts" / "hw_check.py"])
 
 
+def task_download_qwen(args: list[str]) -> None:
+    """Download the pinned Qwen backbone (configs/backbone.yaml) to data/models/ and verify it on the GPU."""
+    run([require_venv(), ROOT / "scripts" / "download_backbone.py", *args])
+
+
 def task_data(args: list[str]) -> None:
     """Download traces per their READMEs (data/raw/<name>/SOURCES.md), then docs/data_dictionary.md."""
     py = require_venv()
@@ -131,6 +136,7 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "lock": task_lock,
     "hwcheck": task_hwcheck,
     "vram-probe": task_vram_probe,
+    "download-qwen": task_download_qwen,
     "test": task_test,
     "data": task_data,
     "eda": task_eda,

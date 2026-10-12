@@ -25,6 +25,7 @@ import yaml
 from torch import nn
 
 from gde import paths
+from gde.models.backbone import resolve_backbone_source
 from gde.runtime import resolve_device
 
 MIB = 1024**2
@@ -63,7 +64,8 @@ def main() -> None:
     backbone_cfg = yaml.safe_load((paths.CONFIGS / "backbone.yaml").read_text(encoding="utf-8"))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default=backbone_cfg["model_id"])
-    ap.add_argument("--revision", default=backbone_cfg["revision"])
+    ap.add_argument("--revision", default=None,
+                    help="default: pinned hash for the configured model, else the repo's main branch")
     ap.add_argument("--dtype", choices=["bf16", "fp16"], default=None, help="default: bf16 if supported")
     ap.add_argument("--seq-len", type=int, default=512)
     ap.add_argument("--batches", type=int, nargs="+", default=[1, 4, 8])
@@ -71,6 +73,9 @@ def main() -> None:
     ap.add_argument("--lora-r", type=int, default=16)
     ap.add_argument("--out", type=Path, default=paths.DOCS / "vram_probe.json")
     args = ap.parse_args()
+    if args.revision is None:
+        args.revision = (backbone_cfg["revision"] if args.model == backbone_cfg["model_id"]
+                         else "main")
 
     from peft import LoraConfig, get_peft_model
     from transformers import AutoConfig, AutoModel
@@ -87,9 +92,10 @@ def main() -> None:
     free, total = torch.cuda.mem_get_info(device)
     used_before_load = total - free
 
-    config = AutoConfig.from_pretrained(args.model, revision=args.revision)
+    source, load_revision = resolve_backbone_source(args.model, args.revision)
+    config = AutoConfig.from_pretrained(source, revision=load_revision)
     model = AutoModel.from_pretrained(
-        args.model, revision=args.revision, dtype=dtype, attn_implementation="sdpa",
+        source, revision=load_revision, dtype=dtype, attn_implementation="sdpa",
     ).to(device)
     model.eval()
     hidden = model.config.get_text_config().hidden_size
@@ -150,6 +156,7 @@ def main() -> None:
         "command": "python tasks.py vram-probe",
         "model_id": args.model,
         "revision": args.revision,
+        "loaded_from": source,
         "architecture": (config.architectures or ["?"])[0],
         "params": n_params,
         "dtype": args.dtype,

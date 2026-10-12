@@ -131,7 +131,7 @@ def implication_section(cuda_ok: bool) -> list[str]:
         fwd = fitting(r["frozen_forward"])
         lora = fitting(r["lora_step"]["by_batch"])
         fwd_txt = f"fits at batch {', '.join(fwd)}" if fwd else "does not fit at any tested batch size"
-        lora_txt = (f"fits in 4 GB at batch {', '.join(lora)}" if lora
+        lora_txt = (f"fits in this GPU's {r['total_vram_mib'] / 1024:.0f} GB at batch {', '.join(lora)}" if lora
                     else "**does not fit in this GPU's dedicated VRAM at any tested batch size**")
         out.append(f"- `{model_id}` ({r['dtype']}, seq_len {r['seq_len']}): frozen forward {fwd_txt}; "
                    f"one LoRA step with gradient checkpointing {lora_txt}.")

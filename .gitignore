@@ -13,8 +13,14 @@ data/**
 !data/raw/*/
 !data/raw/*/SOURCES.md
 !data/raw/DOWNLOADS.md
+!data/models/*/
+!data/models/*/SOURCES.md
+!data/models/*/SHA256SUMS
 
 checkpoints/**
 experiments/**
 !checkpoints/.gitkeep
 !experiments/.gitkeep
+
+# Local wheel cache (e.g. torch cu130 fetched past a flaky network path); never commit.
+.wheels/
