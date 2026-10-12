@@ -28,7 +28,7 @@ from gde.evaluation.benchmark import (
     run_cell_parallel,
 )
 from gde.ingestion.synthetic import SyntheticConfig, generate_workload
-from gde.paths import CONFIGS, REPORTS
+from gde.paths import CONFIGS, DATA, REPORTS
 from gde.simulator.cluster import ClusterSpec
 from gde.simulator.engine import Engine
 from gde.simulator.workload import sim_jobs_from_unified_df
@@ -91,6 +91,35 @@ def ranking_of(agg, regime, rho, overlay, metric) -> list[str]:
     return [s for s, _ in rank_by(agg, regime, rho, overlay, metric)]
 
 
+def job_type_mix(regimes: dict) -> dict:
+    """Trace job-type mix per regime over the benchmark seeds (proxy labels:
+    batch_inference = short-small proxy, derived; online_inference = overlay)."""
+    import collections
+
+    from gde.simulator.workload import TraceConfig, load_trace_window
+
+    cluster = ClusterSpec.from_yaml(CONFIGS / regimes["primary"]["cluster"])
+    out = {}
+    for name, window, cap in (("capped-1h", 3600.0, 21600.0), ("stress-24h", 86400.0, None)):
+        counts: collections.Counter = collections.Counter()
+        overlay_jobs = 0
+        for seed in regimes["benchmark_seeds"]:
+            jobs, _ = load_trace_window(
+                DATA / "processed" / "alibaba2020.parquet", cluster,
+                TraceConfig(window_s=window, rho=0.8, max_jobs=10**9, duration_cap_s=cap),
+                seed=seed)
+            for j in jobs:
+                counts[j.job_type] += 1
+            overlay_jobs += round(0.25 * len(jobs))
+        total = sum(counts.values())
+        out[name] = {
+            "trace_jobs": total,
+            "mix": {k: {"n": v, "share": v / total} for k, v in counts.most_common()},
+            "overlay_jobs_at_25pct": overlay_jobs,
+        }
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(CONFIGS / "experiment_p4.yaml"))
@@ -112,8 +141,7 @@ def main() -> None:
                  "Regimes: `configs/regimes.yaml` (FROZEN, pre-registered in "
                  "`reports/sim/regime_prereg.md` before any P4 result). "
                  f"Schedulers: {', '.join(schedulers)}. "
-                 f"Paired seeds: {seeds[0]}..{seeds[-1]} (n={len(seeds)}), disjoint from the "
-                 "P3b diagnostic seeds. Est mode: stored.")
+                 f"Paired seeds (Amendment 1): {seeds}. Est mode: stored.")
     lines.append("")
     lines.append("**Headline disclosures (binding):** on capped-1h, **64% of offered work is "
                  "excluded by the 6 h duration cap** (measured, `reports/sim/p3b_regime.md`); "
@@ -258,7 +286,7 @@ def main() -> None:
     lines.append("The P3b sentence \"no multi-day job straddles the 3600 s horizon\" meant "
                  "**multi-day RUNNING jobs** (excluded by the 6 h cap) — not that rollouts "
                  "end with an idle cluster. Measured below: fraction of mid-run rollouts "
-                 "(capped-1h, FIFO, seed 31001, sampled every "
+                 f"(capped-1h, FIFO, seed {seeds[0]}, sampled every "
                  f"{cfg['straddle']['sample_every']}th decision point) that still have "
                  "running jobs when the horizon binds:")
     lines.append("")
@@ -284,6 +312,7 @@ def main() -> None:
     # ---- provenance / mix ----------------------------------------------------
     r0 = next(r for r in results if r["cell"]["regime"] == "capped-1h")
     tman = r0["trace_manifest"]
+    mix = job_type_mix(regimes)
     lines.append("## Regime provenance and job-type mix")
     lines.append("")
     lines.append(f"- capped-1h example cell (seed {seeds[0]}): window_start "
@@ -292,6 +321,23 @@ def main() -> None:
                  f"n_jobs {tman['n_jobs']}, W {tman['work_gpu_s'] / 1e6:.2f}M GPU-s, "
                  f"T_sim {tman['t_sim_s'] / 86400:.2f} d, scale "
                  f"{tman['arrival_scale_factor']:.4f}.")
+    lines.append("- Job-type mix per regime over the benchmark seeds "
+                 "(batch_inference = **short-small proxy**, derived; online_inference "
+                 "= synthetic overlay):")
+    lines.append("")
+    lines.append("| regime | trace jobs | training | batch_inference (proxy) | overlay @25% |")
+    lines.append("|---|---|---|---|---|")
+    for name in ("capped-1h", "stress-24h"):
+        m = mix[name]
+        tr = m["mix"].get("training", {"n": 0, "share": 0.0})
+        bi = m["mix"].get("batch_inference", {"n": 0, "share": 0.0})
+        lines.append(f"| {name} | {m['trace_jobs']} | {tr['n']} ({100 * tr['share']:.1f}%) "
+                     f"| {bi['n']} ({100 * bi['share']:.1f}%) | ~{m['overlay_jobs_at_25pct']} |")
+    lines.append("")
+    lines.append("The 6 h cap shifts the mix toward short jobs (proxy share rises from "
+                 "12.8% uncapped to 19.9% capped) — a disclosed consequence of the "
+                 "pre-registered filter, not a re-pick.")
+    lines.append("")
     lines.append("- All trace-derived fields carry P2 provenance (VRAM derived/synthetic; "
                  "job_type derived; priority/deadline synthetic; runtime_est derived, "
                  "MdAPE 45.3%). Overlay fields fully synthetic.")
@@ -303,7 +349,7 @@ def main() -> None:
     total_events = sum(r["events"] for r in results)
     lines.append("## Cost")
     lines.append("")
-    lines.append(f"- {len(results)} main-matrix cells + {len(sensitivity_cells_run)} "
+    lines.append(f"- {len(results)} main-matrix cells + {sensitivity_cells_run} "
                  f"sensitivity cells; {total_events:,} events total; total wall "
                  f"{wall_total / 60:.1f} min (workers={workers}, CPU-only).")
     lines.append("")

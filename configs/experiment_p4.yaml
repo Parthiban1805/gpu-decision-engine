@@ -12,9 +12,9 @@ cap_sensitivity:            # ranking stability ONLY; the 6 h cap is NOT re-pick
   rho: 0.8
   overlay_share: 0.25
   rollout_policy_note: >
-    All caps run the identical six-scheduler harness config of this file
-    (same policies, seeds 31001-31010, overlay 0.25, FIFO-compatible engine);
-    no per-cap policy or horizon changes.
+    All caps run the identical six-scheduler harness config of this file on the
+    regimes.yaml benchmark seeds (Amendment 1 list), overlay 0.25, FIFO-compatible
+    engine; no per-cap policy or horizon changes.
 
 sanity_check:               # PLAN P4 gate: EDF <= FIFO on deadline misses
   mix: {training: 0.2, batch_inference: 0.8}
