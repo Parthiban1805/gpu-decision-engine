@@ -91,6 +91,21 @@ p6_labeling:
     penalty (runtime_est in place of duration); report hard-label agreement and
     regret rank correlation. If agreement < 80%, both label sets are carried
     through P7 and reported.
+  tau_rule:                       # AMENDMENT 3: fixed before any model result
+    rule: tau = 0.5 * median(positive regrets) over TRAIN-split states only
+    rationale: half the typical non-zero gap; computed once at dataset build,
+      frozen for P7 training/calibration; val/test never influence tau.
+  j_normalization:                # AMENDMENT 3: exact formulas in
+    # src/gde/labeling/objective.py (docstring): C per GPU-hour, V and T
+    # (incl. TP) per active job, F in [0,1]; n_active = finished-in-window +
+    # pending-at-end + running-at-end; trajectory J uses TP = 0.
+    preset: balanced
+  state_sampling:                 # AMENDMENT 3
+    schedulers: [fifo, priority, sjf, edf, best_fit, easy_backfill]
+    stratification: time-in-window tercile x queue-length tercile, per
+      (window, scheduler); all states from one window stay in one split
+    budget: set after the throughput measurement (experiment_p6.yaml),
+      before labeling; fixed for P7
   split_seed_replacement: >
     The Amendment-1 rule (seed+500 until the capped-1h window is non-empty)
     applies to split seeds when they are first sampled in P6; replacements

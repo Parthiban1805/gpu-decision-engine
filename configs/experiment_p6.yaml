@@ -1,0 +1,30 @@
+# P6 labeling experiment (primary track only, per pre-registration).
+# Horizon, rollout policy (edf), terminal penalty and tau rule come from
+# configs/regimes.yaml (Amendments 2-3, FROZEN).
+
+regime: capped-1h
+overlay_share: 0.25           # labeled mix matches the P4 main comparison
+k_candidates: 16
+
+state_budget:                 # FIXED after the throughput measurement (see
+  states_per_window_scheduler: 4    # reports/p6/dataset_card.md); do not tune
+  max_states_total: 1440      # after seeing labels/model results
+
+headroom:                     # oracle headroom, item 2 of the dataset card
+  seeds: [31501, 31002, 31003, 31004, 31005, 31506, 31007, 31008, 31009, 31010]
+  bootstrap: {n: 2000, alpha: 0.05}
+
+sensitivity:                  # pre-registered label sensitivity check
+  subsample_frac: 0.1
+
+ortools:                      # clairvoyant reference (not an online competitor)
+  window_jobs: 10
+  window_gpus: 4
+  time_limit_s: 10
+  n_windows: 12
+  seed: 33001
+
+report:
+  out_md: reports/p6/dataset_card.md
+  out_json: reports/p6/labels_meta.json
+  parquet: data/labels/p6_primary.parquet
