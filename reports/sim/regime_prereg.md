@@ -48,6 +48,14 @@ Benchmark (paired across schedulers, ≥10): 31001–31010 — disjoint from the
 diagnostic seeds 30001/30002. Splits: train 31101–31130, val 31201–31210,
 test 31301–31310. Full lists in `configs/regimes.yaml`.
 
+**Amendment 1 (2026-10-12, still before any scheduler result):** seeds 31001
+and 31006 drew 1 h windows in the trace's first ~5 days, where arrivals are
+~0/h (0 capped-feasible jobs — degenerate cells, measured before any
+scheduler was run). Rule: a benchmark seed whose capped-1h window yields 0
+feasible jobs is replaced by seed+500, repeatedly, until non-empty.
+31001→31501 (485 capped-feasible jobs), 31006→31506 (361). Effective benchmark
+seeds: 31501, 31002–31005, 31506, 31007–31010. Cap, window and ρ unchanged.
+
 ## P7 gate (defined now)
 
 V1 must **(a) beat the best heuristic on the primary TEST split** — mean

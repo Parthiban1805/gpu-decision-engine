@@ -91,6 +91,9 @@ class TraceConfig:
     noise_sigma: float = 0.25
     max_jobs: int = 5000
     gpu_type: str = "ignore"        # ignore | strict (sim types are abstract)
+    # FROZEN 6h filter (configs/regimes.yaml): drops duration > cap INSIDE the
+    # window, BEFORE feasibility/W/time-scaling. Kept jobs are byte-identical.
+    duration_cap_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,7 @@ def load_trace_window(parquet_path: str | Path, cluster: ClusterSpec, cfg: Trace
         "noise_sigma": cfg.noise_sigma if cfg.est_mode == "noisy" else None,
         "gpu_type": cfg.gpu_type,
         "max_jobs": cfg.max_jobs,
+        "duration_cap_s": cfg.duration_cap_s,
     }
 
     t_min = float(df["submit_ts"].min())
@@ -138,6 +142,14 @@ def load_trace_window(parquet_path: str | Path, cluster: ClusterSpec, cfg: Trace
     window_start = t_min + float(rng.uniform(0.0, max(span - window_s, 0.0)))
     # closed interval so a job landing exactly on the window end is kept
     win = df[(df["submit_ts"] >= window_start) & (df["submit_ts"] <= window_start + window_s)]
+    if cfg.duration_cap_s is not None:
+        # pre-registered regime filter: applied inside the window, before
+        # feasibility/W/time-scaling (configs/regimes.yaml, FROZEN)
+        before = len(win)
+        win = win[win["duration_s"] <= cfg.duration_cap_s]
+        manifest["n_cap_dropped"] = int(before - len(win))
+    else:
+        manifest["n_cap_dropped"] = 0
     manifest["window_start"] = window_start
     manifest["n_jobs_in_window"] = int(len(win))
 

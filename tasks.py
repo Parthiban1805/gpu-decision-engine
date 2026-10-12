@@ -134,6 +134,11 @@ def task_sim_smoke(args: list[str]) -> None:
     run([require_venv(), ROOT / "scripts" / "sim_smoke.py", *args])
 
 
+def task_baselines(args: list[str]) -> None:
+    """P4: heuristic baselines on the pre-registered regimes -> reports/p4/."""
+    run([require_venv(), ROOT / "scripts" / "bench_p4.py", *args])
+
+
 def not_implemented(phase: str) -> Callable[[list[str]], None]:
     def task(args: list[str]) -> None:
         sys.exit(f"Not implemented yet (arrives in phase {phase} of PLAN.md).")
@@ -152,7 +157,7 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "eda": task_eda,
     "normalize": task_normalize,
     "sim-smoke": task_sim_smoke,
-    "baselines": not_implemented("P4"),
+    "baselines": task_baselines,
     "label": not_implemented("P6"),
     "train-v1": not_implemented("P7"),
     "bench": not_implemented("P8"),

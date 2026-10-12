@@ -110,7 +110,8 @@ gpu-decision-engine/
 ├── tasks.py                            # python tasks.py setup | data | sim-smoke | baselines | label | train-v1 | bench | api | test
 ├── configs/
 │   ├── cluster_small.yaml              # 8 GPUs
-│   ├── cluster_medium.yaml             # 64 GPUs, heterogeneous
+│   ├── cluster_medium.yaml              # 64 GPUs, heterogeneous
+│   ├── regimes.yaml                     # FROZEN two-track benchmark regimes (P3b pre-registration; see reports/sim/regime_prereg.md)
 │   ├── objectives.yaml                 # weights w1..w4, price/power constants
 │   ├── workload_synthesis.yaml         # §2.3
 │   ├── runtime.yaml                    # device: auto | cuda | cpu (training/inference only)
@@ -245,6 +246,7 @@ The softmax probability measures *agreement with the oracle/rollout label*, not 
 2. **Cross-trace test:** train on Alibaba2020, test on Helios and/or Philly (different clusters, GPU counts, mixes).
 3. **Stress tests:** load factor ρ ∈ {0.6, 0.8, 0.95, 1.1}; burst arrivals; mix shifts (more online inference); heterogeneous GPU capacities; noisy runtime estimates (σ ∈ {0, 0.25, 0.5}).
 Traces come from clusters of thousands of GPUs; for simulation, **sample time windows and scale arrival rate / job sizes to a target load on the 8- and 64-GPU simulated clusters**, and record the scaling in the experiment config.
+**Benchmark regimes (pre-registered in `configs/regimes.yaml`, FROZEN):** PRIMARY `capped-1h` (1 h windows, 6 h duration-cap filter applied inside the window before time-scaling, ρ sweep above runs here) and STRESS `stress-24h` (24 h window, uncapped, ρ 0.8, run in every phase). The ρ sweep runs on the primary regime only. Every table/plot carries a regime tag; headlines disclose the cap (64% of offered work excluded) and the synthetic fields; the stress track is held out from labeling/DAgger from P6 onward.
 
 **Metrics:** GPU utilization; throughput; p50/p95 wait (and inference queue latency); deadline/SLO violation rate; cost per completed job; fragmentation; idle GPU-hours; decision latency; **regret vs rollout oracle**; Brier/ECE.
 **Statistics:** ≥ 5 seeds per setting; paired comparison vs best heuristic; bootstrap 95% CIs; report wins/ties/losses, not just means. Auto-generate `reports/<exp>/report.md` with tables and plots, including a "synthetic fields used" section.
@@ -332,7 +334,7 @@ constants:                       # ASSUMPTIONS, not measured prices
   energy_price_per_kwh: 0.10
   idle_gpu_penalty_per_hour: 0.5
   slo_miss_penalty: 50.0
-horizon: {n_arrivals: 20, max_seconds: 3600, terminal_penalty: true}
+horizon: {n_arrivals: 20, max_seconds: 3600, terminal_penalty: true}   # stress-24h base; per-regime override in configs/regimes.yaml (primary capped-1h raises max_seconds to 86400 so n_arrivals binds) — pre-registered, FROZEN
 labeling: {tau: 1.0, top_k_candidates: 16, rollout_policy: best_heuristic}
 ```
 

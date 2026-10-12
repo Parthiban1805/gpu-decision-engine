@@ -66,10 +66,26 @@ class GpuView:
     gpu_id: int
     type: str
     vram_gb: float
+    compute_factor: float
     used_share: float
     used_vram: float
     free_share: float
     free_vram: float
+
+
+@dataclass(frozen=True)
+class RunningView:
+    """Decision-time view of a running job. est_finish_ts uses runtime_est_s
+    (the feature), never the actual duration — no leakage into policies."""
+    job_id: str
+    gpu_ids: tuple[int, ...]
+    start_ts: float
+    est_finish_ts: float
+    share_per_gpu: float
+    per_gpu_vram: float
+    priority: int
+    job_type: str
+    runtime_est_s: float
 
 
 @dataclass(frozen=True)
@@ -81,6 +97,7 @@ class DecisionView:
     head_job_id: str | None
     head_fits: bool
     gpus: tuple[GpuView, ...]
+    running: tuple[RunningView, ...]
     n_running: int
 
 
@@ -242,6 +259,7 @@ class Engine:
         if job.job_type == "online_inference":
             # SLO clock includes model load (decision): start + load_s - submit <= slo_s
             record.slo_met = (record.start_ts + job.load_s - job.submit_ts) <= (job.slo_s or 0.0) + EPS
+        record.final = True
         self._push(EventKind.DECISION_POINT, event.time)
 
     def _on_decision_point(self) -> None:
@@ -287,8 +305,8 @@ class Engine:
         state = self.state
         cluster = state.cluster
         gpus = tuple(
-            GpuView(g.gpu_id, g.spec.type, g.spec.vram_gb, g.used_share, g.used_vram,
-                    g.free_share, g.free_vram)
+            GpuView(g.gpu_id, g.spec.type, g.spec.vram_gb, g.spec.compute_factor,
+                    g.used_share, g.used_vram, g.free_share, g.free_vram)
             for g in cluster.gpus.values()
         )
         pending_ids = list(state.pending.keys())
@@ -314,11 +332,25 @@ class Engine:
                 deadline_ts=job.deadline_ts, slo_s=job.slo_s, load_s=job.load_s,
                 gpu_type_req=job.gpu_type_req, fits=fits, arrival_index=arrival_index,
             ))
+        running_views = []
+        for job_id, placement in cluster.placements.items():
+            job = state.jobs[job_id]
+            slowest_cf = min(cluster.gpus[i].spec.compute_factor for i in placement.gpu_ids)
+            est_run = (job.load_s + job.runtime_est_s) / slowest_cf
+            running_views.append(RunningView(
+                job_id=job_id, gpu_ids=placement.gpu_ids,
+                start_ts=placement.start_ts,
+                est_finish_ts=placement.start_ts + est_run,
+                share_per_gpu=placement.share_per_gpu,
+                per_gpu_vram=placement.per_gpu_vram,
+                priority=job.priority, job_type=job.job_type,
+                runtime_est_s=job.runtime_est_s,
+            ))
         return DecisionView(
             now=state.now, n_pending=len(pending_ids),
             n_truncated=max(0, len(pending_ids) - self.config.view_pending_cap),
             pending=tuple(views), head_job_id=head_job_id, head_fits=head_fits,
-            gpus=gpus, n_running=len(cluster.placements),
+            gpus=gpus, running=tuple(running_views), n_running=len(running_views),
         )
 
     def _sample(self) -> None:

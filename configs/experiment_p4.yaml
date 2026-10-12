@@ -1,0 +1,35 @@
+# P4 experiment: heuristic baselines under the pre-registered regimes.
+# Regime definitions (windows, caps, rho, horizons, seeds) come from
+# configs/regimes.yaml — FROZEN; this file only picks schedulers and analyses.
+
+schedulers: [fifo, priority, sjf, edf, best_fit, easy_backfill]
+est_mode: stored
+overlay_shares: [0.0, 0.25]
+warmup_frac: 0.1            # initial-backlog exclusion check (capped-1h)
+
+cap_sensitivity:            # ranking stability ONLY; the 6 h cap is NOT re-picked
+  caps_s: [10800, 21600, 43200]     # 3 h, 6 h (frozen), 12 h
+  rho: 0.8
+  overlay_share: 0.25
+  rollout_policy_note: >
+    All caps run the identical six-scheduler harness config of this file
+    (same policies, seeds 31001-31010, overlay 0.25, FIFO-compatible engine);
+    no per-cap policy or horizon changes.
+
+sanity_check:               # PLAN P4 gate: EDF <= FIFO on deadline misses
+  mix: {training: 0.2, batch_inference: 0.8}
+  n_jobs: 800
+  rate_per_s: 0.08
+  seed: 32001
+  cluster_gpus: 4
+
+straddle:                   # step 6: horizon claim correction (capped-1h)
+  scheduler: fifo
+  sample_every: 5
+  horizons:                 # (name, n_arrivals, max_seconds)
+    - {name: primary_prereg, n_arrivals: 20, max_seconds: 86400}
+    - {name: seconds_3600, n_arrivals: 1000000, max_seconds: 3600}
+
+report:
+  out_md: reports/p4/report.md
+  out_json: reports/p4/results.json
