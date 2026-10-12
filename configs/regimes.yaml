@@ -74,11 +74,41 @@ splits:                           # for P6 labeling / P7 training, defined now
 
 p6_labeling:
   tracks: [primary]               # stress-24h is HELD OUT from labeling/DAgger from P6 onward
+  rollout_policy: edf             # AMENDMENT 2: fixed once, identical across all caps/regimes;
+  #                              # never re-picked per cap or per experiment
+  terminal_penalty:               # AMENDMENT 2: form fixed before any label exists
+    uses_true_remaining_time: true   # labels are outcomes computed INSIDE the rollout;
+    #                                # features never see durations (no-leakage unaffected)
+    form: >
+      TP = sum over jobs pending at horizon end of priority_i * ((load_i +
+      duration_i) / cf_i)  [full remaining work, never started]
+      + sum over jobs running at horizon end of priority_i * max(0,
+      ((load_i + duration_i) / cf_i) - (H_end - start_i))  [true remaining]
+    rationale: unbiased J at horizon end; estimate-based penalties would bias
+      labels toward the estimate distribution (MdAPE 45%)
+  label_sensitivity_check: >
+    In P6, recompute labels on a 10% subsample with the estimate-based terminal
+    penalty (runtime_est in place of duration); report hard-label agreement and
+    regret rank correlation. If agreement < 80%, both label sets are carried
+    through P7 and reported.
+  split_seed_replacement: >
+    The Amendment-1 rule (seed+500 until the capped-1h window is non-empty)
+    applies to split seeds when they are first sampled in P6; replacements
+    logged. The arrival-free trace prefix affects only the train band (see
+    reports/p4/report.md eligibility section).
 
 p7_gate:
   statement: >
-    V1 must (a) BEAT the best heuristic on the primary TEST split and
-    (b) be NO WORSE than the best heuristic on the stress track. Both reported.
+    V1 must BEAT the best heuristic on the primary TEST split and be NO WORSE
+    than the best heuristic on the stress track. Both reported.
+  best_heuristic:                 # AMENDMENT 2: EDF and SJF tied in P4 (see reports/p4)
+    candidates: [edf, sjf]
+    rule: >
+      "Best heuristic" = BOTH EDF and SJF: on the primary TEST split V1 must
+      beat each of them (paired bootstrap 95% CI on mean J, balanced preset).
+      On the stress track V1 must be no worse than min-J(EDF, SJF), where the
+      EDF-vs-SJF tie is broken by balanced-preset J on the VAL split once P6
+      computes J. Reported pairwise.
   metric: mean objective J, balanced preset (PLAN.md 5.1), lower is better
   beat: paired bootstrap 95% CI of (J_V1 - J_best_heuristic) excludes zero on the favorable side
   no_worse: paired bootstrap 95% CI includes zero or favors V1

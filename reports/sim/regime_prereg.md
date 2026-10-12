@@ -84,3 +84,29 @@ side — **and (b) be no worse than the best heuristic on the stress track**
 - Warm-up check on capped-1h: metrics with vs without an initial warm-up
   exclusion; report whether rankings change.
 - Optional cheap cell: uncapped-1h (P3b option B), reported under its own tag.
+
+## Amendment 2 (2026-10-12, after P4 acceptance, BEFORE any P5/P6 work)
+
+- **Best heuristic for the P7 gate:** EDF and SJF tied in P4. The primary-side
+  gate is **beat BOTH** (each pairwise, paired bootstrap 95% CI on mean J,
+  balanced preset); the stress-side gate is no worse than min-J(EDF, SJF),
+  with the EDF/SJF tie broken by balanced-preset J on the VAL split once P6
+  computes J. All pairwise comparisons reported.
+- **P6 rollout policy: `edf`**, fixed in `configs/regimes.yaml`, identical
+  across all caps and regimes; never re-picked per cap.
+- **P6 terminal penalty, form frozen:** TP = Σ_pending priority × (load +
+  duration)/cf (full remaining work, never started) + Σ_running priority ×
+  max(0, (load + duration)/cf − (H_end − start)). It **uses true remaining
+  time** — labels are outcomes computed inside the rollout; features never see
+  durations. Rationale: estimate-based penalties would bias labels toward the
+  estimate distribution (MdAPE 45%). **Label sensitivity check planned:** in
+  P6, recompute labels on a 10% subsample with the estimate-based penalty and
+  report hard-label agreement + regret rank correlation; if agreement < 80%,
+  both label sets are carried through P7.
+- **Split seeds:** the Amendment-1 replacement rule (seed+500 until the
+  capped-1h window is non-empty) applies to split seeds when first sampled in
+  P6, with replacements logged.
+- **Clairvoyant ablation (added analysis, not a competitor):** EASY and SJF
+  re-run with oracle estimates and labeled clairvoyant; reported against the
+  stored-estimate results to isolate the estimate-quality effect on EASY's
+  reservations.
