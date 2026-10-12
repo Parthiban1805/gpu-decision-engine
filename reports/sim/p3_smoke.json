@@ -1,0 +1,1007 @@
+{
+  "config": {
+    "cluster": "cluster_small.yaml",
+    "seed": 30001,
+    "trace": {
+      "parquet": "data/processed/alibaba2020.parquet",
+      "window_s": 86400,
+      "rho": 0.8,
+      "gpu_type": "ignore",
+      "max_jobs": 5000,
+      "est_modes": [
+        "stored",
+        "oracle",
+        "noisy"
+      ],
+      "noise_sigma": 0.25
+    },
+    "overlay": {
+      "shares": [
+        0.0,
+        0.1,
+        0.25
+      ],
+      "duration": {
+        "mu": 2.505,
+        "sigma": 0.436,
+        "min_s": 5.0,
+        "max_s": 30.0
+      },
+      "num_gpus": {
+        "min": 0.1,
+        "max": 0.5
+      },
+      "priority": [
+        9,
+        10
+      ],
+      "slo_s": [
+        1,
+        2,
+        5,
+        10
+      ],
+      "model_load_s": 0.0,
+      "vram_gb": {
+        "min": 2.0,
+        "max": 10.0
+      }
+    },
+    "engine": {
+      "max_decisions_per_timestep": 1000,
+      "view_pending_cap": 64
+    },
+    "perf": {
+      "fork_queue_lengths": [
+        10,
+        100,
+        1000
+      ],
+      "candidate_queue_length": 1000,
+      "repeats": 50
+    }
+  },
+  "rows": [
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31001,
+        "est_mode": "stored",
+        "overlay_share": 0.0,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "stored",
+          "noise_sigma": null,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.0,
+          "n_jobs": 0,
+          "model_load_s": 0.0,
+          "seed": null
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 25000,
+        "makespan_s": 10354508.231345821
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10354508.231345821,
+          "utilization_arrival_window": 0.56076762208249,
+          "idle_gpu_hours_arrival_window": 7481.635950212936,
+          "gpu_hours_total": 13626.747619444446,
+          "energy_kwh_arrival_window": 3314.437729240577,
+          "energy_kwh_total": 4651.02052617946,
+          "avg_vram_used_gb_arrival_window": 62.126172454074336,
+          "avg_vram_used_gb_total": 65.31447161445196,
+          "fragmentation_mean": 0.0005162895100500396,
+          "fragmentation_max": 0.4052761523683806,
+          "queue_len_p50": 805.0,
+          "queue_len_p95": 1608.0,
+          "events_processed": 25000,
+          "decision_points": 10000
+        },
+        "groups": {
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1717778.4633223414,
+            "wait_s_p50": 1823707.6773983482,
+            "wait_s_p95": 3201653.2739733635,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9551.798574092618,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5607676220824904
+          }
+        }
+      },
+      "digest": "faee3b9924bae09f5d2fec7d7eacc4a6d2e8fef3bed0e727222680e67b679c70",
+      "wall_s": 5.02442820003489,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31002,
+        "est_mode": "stored",
+        "overlay_share": 0.1,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "stored",
+          "noise_sigma": null,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.1,
+          "n_jobs": 500,
+          "model_load_s": 0.0,
+          "seed": 31002,
+          "duration": {
+            "mu": 2.505,
+            "sigma": 0.436,
+            "min_s": 5.0,
+            "max_s": 30.0
+          },
+          "num_gpus": {
+            "min": 0.1,
+            "max": 0.5
+          },
+          "slo_s": [
+            1.0,
+            2.0,
+            5.0,
+            10.0
+          ]
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 27500,
+        "makespan_s": 10354513.792079495
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10354513.792079495,
+          "utilization_arrival_window": 0.5606061155479464,
+          "idle_gpu_hours_arrival_window": 7484.386961194333,
+          "gpu_hours_total": 13627.304799359361,
+          "energy_kwh_arrival_window": 3313.777486605039,
+          "energy_kwh_total": 4651.154990790196,
+          "avg_vram_used_gb_arrival_window": 62.114838102092214,
+          "avg_vram_used_gb_total": 65.31830266016424,
+          "fragmentation_mean": 0.00039387942918298383,
+          "fragmentation_max": 0.4052761523683806,
+          "queue_len_p50": 878.0,
+          "queue_len_p95": 1760.0,
+          "events_processed": 27500,
+          "decision_points": 11000
+        },
+        "groups": {
+          "overlay": {
+            "n_jobs": 500,
+            "wait_s_mean": 1630532.1930793845,
+            "wait_s_p50": 1335495.2365214508,
+            "wait_s_p95": 3178498.46044573,
+            "gpu_hours": 0.557179914912219,
+            "gpu_hours_in_window": 0.36802294723278484,
+            "energy_kwh_incremental": 0.13372317957893254,
+            "deadline_miss_rate": null,
+            "slo_miss_rate": 0.932,
+            "realized_load": 2.1605915513259598e-05
+          },
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1718758.96822985,
+            "wait_s_p50": 1825052.9190351926,
+            "wait_s_p95": 3203056.8392412486,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9548.679540163983,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5605845096324332
+          }
+        }
+      },
+      "digest": "88da5130e5dd1993961120ec002176f1097e9a7099578e8439445ad93f3c1f2d",
+      "wall_s": 5.5632938999915496,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31003,
+        "est_mode": "stored",
+        "overlay_share": 0.25,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "stored",
+          "noise_sigma": null,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.25,
+          "n_jobs": 1250,
+          "model_load_s": 0.0,
+          "seed": 31003,
+          "duration": {
+            "mu": 2.505,
+            "sigma": 0.436,
+            "min_s": 5.0,
+            "max_s": 30.0
+          },
+          "num_gpus": {
+            "min": 0.1,
+            "max": 0.5
+          },
+          "slo_s": [
+            1.0,
+            2.0,
+            5.0,
+            10.0
+          ]
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 31250,
+        "makespan_s": 10354518.021024654
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10354518.021024654,
+          "utilization_arrival_window": 0.5600860824415633,
+          "idle_gpu_hours_arrival_window": 7493.24491106238,
+          "gpu_hours_total": 13628.16224314209,
+          "energy_kwh_arrival_window": 3311.6515786367077,
+          "energy_kwh_total": 4651.3613411574,
+          "avg_vram_used_gb_arrival_window": 62.07614854644681,
+          "avg_vram_used_gb_total": 65.32429815744868,
+          "fragmentation_mean": 0.0004377209214028859,
+          "fragmentation_max": 0.44819609549391765,
+          "queue_len_p50": 986.0,
+          "queue_len_p95": 2032.0,
+          "events_processed": 31250,
+          "decision_points": 12500
+        },
+        "groups": {
+          "overlay": {
+            "n_jobs": 1250,
+            "wait_s_mean": 1683004.7044095038,
+            "wait_s_p50": 1826413.5154096829,
+            "wait_s_p95": 3148594.471882009,
+            "gpu_hours": 1.4146236976451987,
+            "gpu_hours_in_window": 0.864447978274881,
+            "energy_kwh_incremental": 0.33950968743484766,
+            "deadline_miss_rate": null,
+            "slo_miss_rate": 0.9336,
+            "realized_load": 5.0750069050453256e-05
+          },
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1721062.7110473409,
+            "wait_s_p50": 1828925.6552218217,
+            "wait_s_p95": 3206834.3922208427,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9539.3251652649,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5600353323725132
+          }
+        }
+      },
+      "digest": "e5f68754e7ff96aeba982d7c98c6a4736e99e9c421541338d9024a4ec0b9ba3b",
+      "wall_s": 6.423557100002654,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31004,
+        "est_mode": "oracle",
+        "overlay_share": 0.0,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "oracle",
+          "noise_sigma": null,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.0,
+          "n_jobs": 0,
+          "model_load_s": 0.0,
+          "seed": null
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 25000,
+        "makespan_s": 10354508.231345821
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10354508.231345821,
+          "utilization_arrival_window": 0.56076762208249,
+          "idle_gpu_hours_arrival_window": 7481.635950212936,
+          "gpu_hours_total": 13626.747619444446,
+          "energy_kwh_arrival_window": 3314.437729240577,
+          "energy_kwh_total": 4651.02052617946,
+          "avg_vram_used_gb_arrival_window": 62.126172454074336,
+          "avg_vram_used_gb_total": 65.31447161445196,
+          "fragmentation_mean": 0.0005162895100500396,
+          "fragmentation_max": 0.4052761523683806,
+          "queue_len_p50": 805.0,
+          "queue_len_p95": 1608.0,
+          "events_processed": 25000,
+          "decision_points": 10000
+        },
+        "groups": {
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1717778.4633223414,
+            "wait_s_p50": 1823707.6773983482,
+            "wait_s_p95": 3201653.2739733635,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9551.798574092618,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5607676220824904
+          }
+        }
+      },
+      "digest": "faee3b9924bae09f5d2fec7d7eacc4a6d2e8fef3bed0e727222680e67b679c70",
+      "wall_s": 5.03276030003326,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31005,
+        "est_mode": "oracle",
+        "overlay_share": 0.1,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "oracle",
+          "noise_sigma": null,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.1,
+          "n_jobs": 500,
+          "model_load_s": 0.0,
+          "seed": 31005,
+          "duration": {
+            "mu": 2.505,
+            "sigma": 0.436,
+            "min_s": 5.0,
+            "max_s": 30.0
+          },
+          "num_gpus": {
+            "min": 0.1,
+            "max": 0.5
+          },
+          "slo_s": [
+            1.0,
+            2.0,
+            5.0,
+            10.0
+          ]
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 27500,
+        "makespan_s": 10359469.766247587
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10359469.766247587,
+          "utilization_arrival_window": 0.5601774759777643,
+          "idle_gpu_hours_arrival_window": 7491.688165247554,
+          "gpu_hours_total": 13627.300285063908,
+          "energy_kwh_arrival_window": 3312.025197632269,
+          "energy_kwh_total": 4651.8147039150335,
+          "avg_vram_used_gb_arrival_window": 62.08076039798664,
+          "avg_vram_used_gb_total": 65.28694578172673,
+          "fragmentation_mean": 0.0005354086820798847,
+          "fragmentation_max": 0.4052761523683806,
+          "queue_len_p50": 889.0,
+          "queue_len_p95": 1777.0,
+          "events_processed": 27500,
+          "decision_points": 11000
+        },
+        "groups": {
+          "overlay": {
+            "n_jobs": 500,
+            "wait_s_mean": 1740522.6048530901,
+            "wait_s_p50": 1978421.9804355428,
+            "wait_s_p95": 3193893.3229157655,
+            "gpu_hours": 0.5526656194616923,
+            "gpu_hours_in_window": 0.32555767795232626,
+            "energy_kwh_incremental": 0.13263974867080616,
+            "deadline_miss_rate": null,
+            "slo_miss_rate": 0.938,
+            "realized_load": 1.9112861677295776e-05
+          },
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1721257.5081049895,
+            "wait_s_p50": 1828320.5914566936,
+            "wait_s_p95": 3206323.271694022,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9541.420801380043,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5601583631160872
+          }
+        }
+      },
+      "digest": "50567bd8032c87e39226c40d51f64f04df29fd76fe53aa6e9a350f757fcd09cf",
+      "wall_s": 5.505070700019132,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31006,
+        "est_mode": "oracle",
+        "overlay_share": 0.25,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "oracle",
+          "noise_sigma": null,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.25,
+          "n_jobs": 1250,
+          "model_load_s": 0.0,
+          "seed": 31006,
+          "duration": {
+            "mu": 2.505,
+            "sigma": 0.436,
+            "min_s": 5.0,
+            "max_s": 30.0
+          },
+          "num_gpus": {
+            "min": 0.1,
+            "max": 0.5
+          },
+          "slo_s": [
+            1.0,
+            2.0,
+            5.0,
+            10.0
+          ]
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 31250,
+        "makespan_s": 10352352.686565947
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10352352.686565947,
+          "utilization_arrival_window": 0.5603716945357031,
+          "idle_gpu_hours_arrival_window": 7488.3799561575,
+          "gpu_hours_total": 13628.122226880922,
+          "energy_kwh_arrival_window": 3312.819167813886,
+          "energy_kwh_total": 4651.063025993573,
+          "avg_vram_used_gb_arrival_window": 62.09846373861342,
+          "avg_vram_used_gb_total": 65.33798132550478,
+          "fragmentation_mean": 0.00029480483360074027,
+          "fragmentation_max": 0.3125,
+          "queue_len_p50": 1011.0,
+          "queue_len_p95": 2046.0,
+          "events_processed": 31250,
+          "decision_points": 12500
+        },
+        "groups": {
+          "overlay": {
+            "n_jobs": 1250,
+            "wait_s_mean": 1724572.2436769838,
+            "wait_s_p50": 1872901.0938827116,
+            "wait_s_p95": 3192655.4193837987,
+            "gpu_hours": 1.3746074364605678,
+            "gpu_hours_in_window": 0.8324928788764514,
+            "energy_kwh_incremental": 0.3299057847505363,
+            "deadline_miss_rate": null,
+            "slo_miss_rate": 0.936,
+            "realized_load": 4.8874046962668685e-05
+          },
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1718814.0312304134,
+            "wait_s_p50": 1827137.404177416,
+            "wait_s_p95": 3204553.456109409,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9544.222075269166,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5603228204887402
+          }
+        }
+      },
+      "digest": "a9e2240d24b1d0ab57a51758e03c4483a79b089645587074be976b6fcbb3f032",
+      "wall_s": 6.471479100000579,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31007,
+        "est_mode": "noisy",
+        "overlay_share": 0.0,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "noisy",
+          "noise_sigma": 0.25,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.0,
+          "n_jobs": 0,
+          "model_load_s": 0.0,
+          "seed": null
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 25000,
+        "makespan_s": 10354508.231345821
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10354508.231345821,
+          "utilization_arrival_window": 0.56076762208249,
+          "idle_gpu_hours_arrival_window": 7481.635950212936,
+          "gpu_hours_total": 13626.747619444446,
+          "energy_kwh_arrival_window": 3314.437729240577,
+          "energy_kwh_total": 4651.02052617946,
+          "avg_vram_used_gb_arrival_window": 62.126172454074336,
+          "avg_vram_used_gb_total": 65.31447161445196,
+          "fragmentation_mean": 0.0005162895100500396,
+          "fragmentation_max": 0.4052761523683806,
+          "queue_len_p50": 805.0,
+          "queue_len_p95": 1608.0,
+          "events_processed": 25000,
+          "decision_points": 10000
+        },
+        "groups": {
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1717778.4633223414,
+            "wait_s_p50": 1823707.6773983482,
+            "wait_s_p95": 3201653.2739733635,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9551.798574092618,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5607676220824904
+          }
+        }
+      },
+      "digest": "faee3b9924bae09f5d2fec7d7eacc4a6d2e8fef3bed0e727222680e67b679c70",
+      "wall_s": 5.004729800042696,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31008,
+        "est_mode": "noisy",
+        "overlay_share": 0.1,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "noisy",
+          "noise_sigma": 0.25,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.1,
+          "n_jobs": 500,
+          "model_load_s": 0.0,
+          "seed": 31008,
+          "duration": {
+            "mu": 2.505,
+            "sigma": 0.436,
+            "min_s": 5.0,
+            "max_s": 30.0
+          },
+          "num_gpus": {
+            "min": 0.1,
+            "max": 0.5
+          },
+          "slo_s": [
+            1.0,
+            2.0,
+            5.0,
+            10.0
+          ]
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 27500,
+        "makespan_s": 10344058.201686861
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10344058.201686861,
+          "utilization_arrival_window": 0.5621053905123637,
+          "idle_gpu_hours_arrival_window": 7458.8491592539995,
+          "gpu_hours_total": 13627.311034136423,
+          "energy_kwh_arrival_window": 3319.906559070714,
+          "energy_kwh_total": 4649.76240841767,
+          "avg_vram_used_gb_arrival_window": 62.244830063451744,
+          "avg_vram_used_gb_total": 65.38437638881287,
+          "fragmentation_mean": 0.000497795627270847,
+          "fragmentation_max": 0.4052761523683806,
+          "queue_len_p50": 876.0,
+          "queue_len_p95": 1772.0,
+          "events_processed": 27500,
+          "decision_points": 11000
+        },
+        "groups": {
+          "overlay": {
+            "n_jobs": 500,
+            "wait_s_mean": 1671354.7500153815,
+            "wait_s_p50": 1813396.9497045833,
+            "wait_s_p95": 3135178.3443374643,
+            "gpu_hours": 0.5634146919753166,
+            "gpu_hours_in_window": 0.3509716326041905,
+            "energy_kwh_incremental": 0.1352195260740759,
+            "deadline_miss_rate": null,
+            "slo_miss_rate": 0.934,
+            "realized_load": 2.06048658069151e-05
+          },
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1710371.547837864,
+            "wait_s_p50": 1813727.387977698,
+            "wait_s_p95": 3191546.1552765155,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9574.234393418948,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5620847856465571
+          }
+        }
+      },
+      "digest": "09143dfcc757d05076311acec9510b07b0c032985434d475eb0a2785823fbbc5",
+      "wall_s": 5.521651100018062,
+      "warnings": []
+    },
+    {
+      "manifest": {
+        "seed": 30001,
+        "run_seed": 31009,
+        "est_mode": "noisy",
+        "overlay_share": 0.25,
+        "trace": {
+          "dataset": "alibaba2020",
+          "parquet": "data/processed/alibaba2020.parquet",
+          "seed": 30001,
+          "window_s": 86400,
+          "rho_target": 0.8,
+          "est_mode": "noisy",
+          "noise_sigma": 0.25,
+          "gpu_type": "ignore",
+          "max_jobs": 5000,
+          "window_start": 2107480.011167273,
+          "n_jobs_in_window": 8266,
+          "dropped": {
+            "too_many_gpus": 622,
+            "vram_too_big": 14,
+            "nonpositive_duration": 0
+          },
+          "dropped_total": 636,
+          "n_fractional_ceiled": 468,
+          "max_jobs_applied": true,
+          "work_gpu_s": 49056291.42999998,
+          "t_sim_s": 7665045.535937496,
+          "arrival_scale_factor": 0.011271948691617602,
+          "n_jobs": 5000
+        },
+        "overlay": {
+          "share": 0.25,
+          "n_jobs": 1250,
+          "model_load_s": 0.0,
+          "seed": 31009,
+          "duration": {
+            "mu": 2.505,
+            "sigma": 0.436,
+            "min_s": 5.0,
+            "max_s": 30.0
+          },
+          "num_gpus": {
+            "min": 0.1,
+            "max": 0.5
+          },
+          "slo_s": [
+            1.0,
+            2.0,
+            5.0,
+            10.0
+          ]
+        },
+        "cluster_n_gpus": 8,
+        "policy": "fifo",
+        "engine_config": {
+          "max_decisions_per_timestep": 1000,
+          "view_pending_cap": 64
+        },
+        "events_processed": 31250,
+        "makespan_s": 10351830.91340876
+      },
+      "summary": {
+        "cluster": {
+          "n_gpus": 8,
+          "arrival_window_s": 7665045.535937496,
+          "makespan_s": 10351830.91340876,
+          "utilization_arrival_window": 0.5612290731862646,
+          "idle_gpu_hours_arrival_window": 7473.775853050624,
+          "gpu_hours_total": 13628.161437083832,
+          "energy_kwh_arrival_window": 3316.3241525595326,
+          "energy_kwh_total": 4651.002866687972,
+          "avg_vram_used_gb_arrival_window": 62.1693016020352,
+          "avg_vram_used_gb_total": 65.34090882308207,
+          "fragmentation_mean": 0.00045281139688852553,
+          "fragmentation_max": 0.47427138213586767,
+          "queue_len_p50": 1006.0,
+          "queue_len_p95": 2074.0,
+          "events_processed": 31250,
+          "decision_points": 12500
+        },
+        "groups": {
+          "overlay": {
+            "n_jobs": 1250,
+            "wait_s_mean": 1767696.177665298,
+            "wait_s_p50": 1970712.0930199237,
+            "wait_s_p95": 3181987.972520369,
+            "gpu_hours": 1.4138176393913326,
+            "gpu_hours_in_window": 0.8364998284029841,
+            "energy_kwh_incremental": 0.33931623345391904,
+            "deadline_miss_rate": null,
+            "slo_miss_rate": 0.936,
+            "realized_load": 4.910928722034044e-05
+          },
+          "trace": {
+            "n_jobs": 5000,
+            "wait_s_mean": 1713932.1869430484,
+            "wait_s_p50": 1816307.8577527297,
+            "wait_s_p95": 3198142.848029089,
+            "gpu_hours": 13626.747619444437,
+            "gpu_hours_in_window": 9558.822171426527,
+            "energy_kwh_incremental": 3270.4194286666702,
+            "deadline_miss_rate": 0.9532,
+            "slo_miss_rate": null,
+            "realized_load": 0.5611799638990447
+          }
+        }
+      },
+      "digest": "e63a9db3b229ca50e4198bdc9c9716c48dfa3a08880a0bf26c7dc093f53d182e",
+      "wall_s": 6.438909299962688,
+      "warnings": []
+    }
+  ],
+  "checks": {
+    "determinism (same-seed digest)": true,
+    "fork reproduces original trajectory": true,
+    "no VRAM/share overcommit at any event (all runs)": true,
+    "GPU-hours <= capacity x time (all runs)": true,
+    "no guard trips / deadlocks (all runs)": true
+  },
+  "perf": {
+    "fork": {
+      "10": 0.000140250000404194,
+      "100": 0.00023479800089262426,
+      "1000": 0.0012198820000048727
+    },
+    "candidate_build": {
+      "1000": 0.00014894999912939966
+    }
+  }
+}

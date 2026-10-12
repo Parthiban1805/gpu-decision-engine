@@ -129,6 +129,11 @@ def task_test(args: list[str]) -> None:
     run([py, "-m", "pytest", *args])
 
 
+def task_sim_smoke(args: list[str]) -> None:
+    """P3: FIFO smoke runs on the trace replayer + gate re-checks + perf -> reports/sim/."""
+    run([require_venv(), ROOT / "scripts" / "sim_smoke.py", *args])
+
+
 def not_implemented(phase: str) -> Callable[[list[str]], None]:
     def task(args: list[str]) -> None:
         sys.exit(f"Not implemented yet (arrives in phase {phase} of PLAN.md).")
@@ -146,7 +151,7 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "data": task_data,
     "eda": task_eda,
     "normalize": task_normalize,
-    "sim-smoke": not_implemented("P3"),
+    "sim-smoke": task_sim_smoke,
     "baselines": not_implemented("P4"),
     "label": not_implemented("P6"),
     "train-v1": not_implemented("P7"),

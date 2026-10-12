@@ -1,0 +1,8 @@
+# 64-GPU heterogeneous cluster (PLAN.md §4.1). Power figures and prices are
+# config assumptions, not measured values. Idle draw alone is 4.48 kW; the
+# 18 kW budget binds before all GPUs can run flat out (max draw 18.4 kW).
+gpus:
+  - {count: 32, type: v100_32, vram_gb: 32, compute_factor: 1.0, p_idle_w: 70, p_peak_w: 300, price_per_hour: 1.2}
+  - {count: 16, type: t4_16, vram_gb: 16, compute_factor: 0.6, p_idle_w: 40, p_peak_w: 150, price_per_hour: 0.5}
+  - {count: 16, type: a100_80, vram_gb: 80, compute_factor: 1.8, p_idle_w: 100, p_peak_w: 400, price_per_hour: 2.5}
+power_budget_kw: 18.0

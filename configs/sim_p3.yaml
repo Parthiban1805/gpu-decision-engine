@@ -1,0 +1,30 @@
+# P3 smoke experiment: FIFO on the trace replayer x estimate modes x overlay shares.
+cluster: cluster_small.yaml
+seed: 30001
+
+trace:
+  parquet: data/processed/alibaba2020.parquet
+  window_s: 86400          # 24 h of trace time
+  rho: 0.8                 # target load on the simulated cluster
+  gpu_type: ignore         # sim cluster types are abstract; typed trace jobs treated as "any"
+  max_jobs: 5000           # seeded subsample cap (speed); applied after feasibility filtering
+  est_modes: [stored, oracle, noisy]
+  noise_sigma: 0.25
+
+overlay:                   # synthetic online-inference arrivals on top of the trace
+  shares: [0.0, 0.10, 0.25]
+  duration: {mu: 2.505, sigma: 0.436, min_s: 5.0, max_s: 30.0}   # lognormal ~5-30 s (clipped)
+  num_gpus: {min: 0.1, max: 0.5}
+  priority: [9, 10]
+  slo_s: [1, 2, 5, 10]
+  model_load_s: 0.0        # SLO clock: start + load_s - submit <= slo_s
+  vram_gb: {min: 2.0, max: 10.0}
+
+engine:
+  max_decisions_per_timestep: 1000
+  view_pending_cap: 64
+
+perf:                      # reported in the smoke report (amendment D)
+  fork_queue_lengths: [10, 100, 1000]
+  candidate_queue_length: 1000
+  repeats: 50
