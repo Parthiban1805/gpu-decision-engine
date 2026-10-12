@@ -67,6 +67,8 @@ class GpuView:
     type: str
     vram_gb: float
     compute_factor: float
+    p_idle_w: float
+    p_peak_w: float
     used_share: float
     used_vram: float
     free_share: float
@@ -99,6 +101,7 @@ class DecisionView:
     gpus: tuple[GpuView, ...]
     running: tuple[RunningView, ...]
     n_running: int
+    power_budget_w: float = 0.0   # 0 = unconstrained
 
 
 @dataclass
@@ -306,6 +309,7 @@ class Engine:
         cluster = state.cluster
         gpus = tuple(
             GpuView(g.gpu_id, g.spec.type, g.spec.vram_gb, g.spec.compute_factor,
+                    g.spec.p_idle_w, g.spec.p_peak_w,
                     g.used_share, g.used_vram, g.free_share, g.free_vram)
             for g in cluster.gpus.values()
         )
@@ -351,6 +355,7 @@ class Engine:
             n_truncated=max(0, len(pending_ids) - self.config.view_pending_cap),
             pending=tuple(views), head_job_id=head_job_id, head_fits=head_fits,
             gpus=gpus, running=tuple(running_views), n_running=len(running_views),
+            power_budget_w=cluster.spec.power_budget_w,
         )
 
     def _sample(self) -> None:
