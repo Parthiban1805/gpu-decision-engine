@@ -112,6 +112,55 @@ p6_labeling:
     logged. The arrival-free trace prefix affects only the train band (see
     reports/p4/report.md eligibility section).
 
+  # AMENDMENT 4 (2026-10-13, after the P7 gate failure and accepted diagnosis,
+  # BEFORE relabeling). This is the ONE AND ONLY allowed label revision.
+  amendment4_label_revision:
+    terminal_penalty_revision:
+      applies_to: jobs pending or running at horizon end
+      projected_lateness: >
+        max(0, horizon_end + remaining_est - deadline_ts) per job, priority-
+        weighted, summed, normalized like V (divided by n_active) and ADDED to
+        the V term of J. remaining_est uses runtime_est_s ONLY (no actual
+        durations): pending jobs (load_s + runtime_est_s); running jobs
+        max(0, load_s + runtime_est_s - elapsed). The work-based TP
+        (Amendment 2, true remaining) is unchanged.
+      rationale: >
+        P7 diagnosis: mean V(WAIT) 4.5 vs V(RUN) 9.2 because admitting a job
+        starts its deadline clock inside the horizon while deferring pushes
+        misses past it; deferring must be charged its projected lateness.
+    precondition_gate:
+      statement: >
+        The greedy-argmin policy from the REVISED labels must beat EDF on
+        closed-loop trajectory J over the VALIDATION windows (paired seeds).
+      pass: >
+        paired bootstrap 95% CI of (J_EDF - J_argmin) excludes 0 on the
+        favorable side, OR mean >= 0 (CI reported either way)
+      on_fail: stop and report; do NOT train any model
+    ablations_report_only:
+      horizon_60: >
+        label a validation subsample with n_arrivals=60; report label
+        composition and argmin-vs-EDF closed loop on 5 validation seeds
+      work_conserving: >
+        argmin over RUN candidates only (never WAIT while any candidate
+        fits); closed loop vs EDF on 5 validation seeds
+    single_revision_rule: >
+      exactly one label revision allowed (this one); no further objective
+      changes after seeing revised results
+    headline_seeds: [34001, 34002, 34003, 34004, 34505, 34006, 34507, 34008, 34009, 34010]
+    #   fresh 1 h windows, never used anywhere before this amendment; 34005 and
+    #   34007 were degenerate (arrival-free prefix) and took the Amendment-1
+    #   seed+500 replacement -> 34505 (643 jobs) / 34507 (251 jobs), verified
+    #   before this commit
+    state_filter: >
+      multi-candidate states only (n_feasible >= 2): single-feasible states
+      are excluded from the training loss and the offline metric (they are
+      not labeled at all; their share is measured and reported in the card)
+    budget: >
+      9 multi-candidate states per (window, scheduler) -> ~2700 states
+      (train ~1620 / val ~540 / test ~540), enabled by the measured
+      453.8 rollouts/s (P6 card); tau recomputed per Amendment 3 on the
+      revised train labels
+
 p7_gate:
   statement: >
     V1 must BEAT the best heuristic on the primary TEST split and be NO WORSE

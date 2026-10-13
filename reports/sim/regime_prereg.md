@@ -110,3 +110,39 @@ side — **and (b) be no worse than the best heuristic on the stress track**
   re-run with oracle estimates and labeled clairvoyant; reported against the
   stored-estimate results to isolate the estimate-quality effect on EASY's
   reservations.
+
+## Amendment 4 (2026-10-13, after the P7 gate failure and accepted diagnosis, BEFORE relabeling)
+
+This is the **one and only allowed label revision**:
+
+1. **Terminal penalty revision.** For jobs pending or running at horizon end,
+   add **projected lateness = max(0, horizon_end + remaining_est −
+   deadline_ts)** — priority-weighted, summed, normalized like V (÷ n_active),
+   added to the V term. `remaining_est` uses **estimates only** (pending:
+   load + runtime_est; running: max(0, that − elapsed)). The work-based TP
+   (Amendment 2, true remaining) is unchanged. Rationale: the P7 diagnosis
+   showed V(WAIT) 4.5 ≪ V(RUN) 9.2 — admitting starts the deadline clock
+   inside the horizon while deferring pushes misses past it; deferral must be
+   charged its projected lateness.
+2. **Precondition gate.** The greedy-argmin policy from the revised labels
+   must beat EDF on closed-loop trajectory J over the **validation windows**
+   (paired seeds): pass = paired bootstrap 95% CI of (J_EDF − J_argmin)
+   excludes 0 on the favorable side, **or** mean ≥ 0 (CI reported either
+   way). **If it fails: stop and report; no model is trained.**
+3. **Ablations, report only:** (a) horizon n_arrivals=60 (label composition +
+   argmin-vs-EDF closed loop on 5 val seeds); (b) work-conserving mode
+   (argmin over RUN candidates only, never WAIT while something fits; closed
+   loop vs EDF on 5 val seeds).
+4. **One-revision rule.** No further objective changes after seeing revised
+   results. **Final headline numbers use fresh windows** — seeds 34001–34004,
+   34505, 34006, 34507, 34008–34010 (34005/34007 were degenerate and took the
+   Amendment-1 +500 replacement, verified before this commit; never used
+   anywhere before).
+5. **Sampling.** Multi-candidate states only (n_feasible ≥ 2): single-
+   feasible states are excluded from the training loss and the offline metric
+   (not labeled; share reported). Budget raised to ~**2,700** states (~1,620
+   train / ~540 val / ~540 test) — enabled by the measured 453.8 rollouts/s.
+   τ recomputed per the Amendment-3 rule on the revised train labels.
+
+Outcome of this revision (relabel → precondition gate → retrain only on
+pass) is reported with all numbers, including negatives.
