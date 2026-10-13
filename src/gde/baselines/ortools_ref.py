@@ -36,13 +36,13 @@ def solve_window(jobs: list[dict], n_gpus: int, total_vram: float,
         model.Add(e == s + int(j["dur"]))
         starts.append(s)
         ends.append(e)
-    # cumulative: GPU-share (x1000) and VRAM (x100)
+    # cumulative: GPU-share (x1000) and VRAM (x100) over interval variables
     share_demands = [int(round(j["share"] * 1000)) for j in jobs]
     vram_demands = [int(round(j["vram"] * 100)) for j in jobs]
-    model.AddCumulative(starts, [d for d in share_demands], ends,
-                        int(n_gpus * 1000))
-    model.AddCumulative(starts, [d for d in vram_demands], ends,
-                        int(total_vram * 100))
+    intervals = [model.NewIntervalVar(s, int(j["dur"]), e, f"iv_{j['job_id']}")
+                 for j, s, e in zip(jobs, starts, ends)]
+    model.AddCumulative(intervals, share_demands, int(n_gpus * 1000))
+    model.AddCumulative(intervals, vram_demands, int(total_vram * 100))
     weighted = []
     for j, e in zip(jobs, ends):
         w = int(j["priority"])
@@ -87,8 +87,13 @@ def edf_window_objective(jobs: list[dict], n_gpus: int, total_vram: float) -> fl
                 obj += j["priority"] * end
                 progressed = True
         if remaining and not progressed:
-            nxt = min(j["arrive"] for j in remaining if j["arrive"] > t)
-            t = max(t, nxt)
+            # advance to the next arrival or the next completion, whichever
+            # comes first (completions free capacity for blocked arrivals)
+            future = [j["arrive"] for j in remaining if j["arrive"] > t]
+            times = ([min(future)] if future else []) + ([running[0][0]] if running else [])
+            if not times:  # nothing pending can ever run — cannot happen with
+                break      # positive capacities, but guard anyway
+            t = max(t, min(times))
             continue
         if running:
             t = running[0][0]

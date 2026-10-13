@@ -139,6 +139,16 @@ def task_baselines(args: list[str]) -> None:
     run([require_venv(), ROOT / "scripts" / "bench_p4.py", *args])
 
 
+def task_label(args: list[str]) -> None:
+    """P6: build labeled decision dataset + dataset card on the primary track."""
+    run([require_venv(), ROOT / "scripts" / "label_p6.py", *args])
+
+
+def task_train_v1(args: list[str]) -> None:
+    """P7: train V1 (GBM + set-encoder MLP), closed-loop gate eval -> reports/p7/."""
+    run([require_venv(), ROOT / "scripts" / "train_v1.py", *args])
+
+
 def not_implemented(phase: str) -> Callable[[list[str]], None]:
     def task(args: list[str]) -> None:
         sys.exit(f"Not implemented yet (arrives in phase {phase} of PLAN.md).")
@@ -158,8 +168,8 @@ TASKS: dict[str, Callable[[list[str]], None]] = {
     "normalize": task_normalize,
     "sim-smoke": task_sim_smoke,
     "baselines": task_baselines,
-    "label": not_implemented("P6"),
-    "train-v1": not_implemented("P7"),
+    "label": task_label,
+    "train-v1": task_train_v1,
     "bench": not_implemented("P8"),
     "train-v2": not_implemented("P9"),
     "api": not_implemented("P12"),

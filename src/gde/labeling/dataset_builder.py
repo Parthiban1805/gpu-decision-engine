@@ -145,13 +145,18 @@ class _ViewHolder:
 
 
 def label_one(args: tuple) -> dict:
-    """Worker: full label (J vector) for one sampled state; optionally also
-    the estimate-based-TP variant (pre-registered sensitivity subsample)."""
+    """Worker: full label (J vector + feature rows) for one sampled state;
+    optionally also the estimate-based-TP variant (sensitivity subsample)."""
     ss_meta, horizon, const_dict, k, est_tp = args
     const = ObjectiveConstants(**const_dict)
     labels = label_state(ss_meta["state"], const, tau=1.0,  # tau applied later
                          n_arrivals=horizon["n_arrivals"],
                          max_seconds=horizon["max_seconds"], k=k)
+    from gde.decisions.candidates import build_candidates
+    from gde.features.state_builder import build_feature_matrix
+    vh = _ViewHolder(ss_meta["state"])
+    cand_set = build_candidates(vh.view, k=k)
+    feature_rows = build_feature_matrix(vh.view, cand_set)
     out = {
         "state_id": ss_meta["state_id"], "split": ss_meta["split"],
         "seed": ss_meta["seed"], "scheduler": ss_meta["scheduler"],
@@ -163,6 +168,7 @@ def label_one(args: tuple) -> dict:
         "n_pending": labels.n_pending,
         "components": [dict(o.components) for o in labels.outcomes],
         "rollout_runtime_s": [o.rollout_runtime_s for o in labels.outcomes],
+        "feature_rows": feature_rows,
     }
     if est_tp:
         est = label_state(ss_meta["state"], const, tau=1.0,
@@ -196,9 +202,11 @@ def apply_tau(records: list[dict], tau: float) -> None:
 
 
 def to_parquet(records: list[dict], tau: float, path: Path) -> pd.DataFrame:
+    from gde.features.state_builder import FEATURE_COLUMNS
     rows = []
     for r in records:
         for i, action_id in enumerate(r["candidates"]):
+            feats = r.get("feature_rows", [{} for _ in r["candidates"]])[i]
             row = {
                 "state_id": r["state_id"], "split": r["split"], "seed": r["seed"],
                 "scheduler": r["scheduler"], "t_frac": r["t_frac"], "qlen": r["qlen"],
@@ -215,6 +223,7 @@ def to_parquet(records: list[dict], tau: float, path: Path) -> pd.DataFrame:
                 "C": r["components"][i]["C"], "V": r["components"][i]["V"],
                 "T": r["components"][i]["T"], "F": r["components"][i]["F"],
             }
+            row.update({c: float(feats.get(c, 0.0)) for c in FEATURE_COLUMNS})
             rows.append(row)
     df = pd.DataFrame(rows)
     path.parent.mkdir(parents=True, exist_ok=True)

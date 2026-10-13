@@ -246,7 +246,8 @@ def main() -> None:
         rb = np.argsort(np.argsort(b)).astype(float)
         return float(np.corrcoef(ra, rb)[0, 1])
 
-    rank_corrs = [_spearman(r["j_values"], r["j_est_values"]) for r in sub]
+    rank_corrs = [c for c in (_spearman(r["j_values"], r["j_est_values"])
+                              for r in sub) if np.isfinite(c)]
     sensitivity = {
         "n_sub": len(sub),
         "hard_agreement": agree / len(sub) if sub else None,
@@ -351,8 +352,10 @@ def main() -> None:
                  f"TRAIN regret = {tau:.4f}.")
     lines.append("- J normalization (objective.py docstring, Amendment 3): mean "
                  f"|C|={np.abs(df['C']).mean():.3f}, |V|={df['V'].mean():.3f}, "
-                 f"|T|={df['T'].mean():.3f}, |F|={df['F'].mean():.3f} — all O(1), "
-                 "weights comparable per PLAN 5.1.")
+                 f"|T|={df['T'].mean():.3f}, |F|={df['F'].mean():.3f}. V and T "
+                 "dominate J under the balanced preset in this regime (deadlines are "
+                 "synthetic and tight at rho 0.8); disclosed — the preset weights are "
+                 "unchanged (frozen).")
 
     # item 5: TP share by candidate type + WAIT agreement
     tp_share_wait = df[df["is_wait"] == 1]["tp_priority_hours"].mean() if (df["is_wait"] == 1).any() else 0
@@ -392,10 +395,10 @@ def main() -> None:
     lines.append("## 7. Sampling stratification and splits")
     lines.append("")
     strat = df.groupby(["split", "scheduler"]).size().unstack(fill_value=0)
-    lines.append("| split | " + " | ".join(strat.columns) + " | total |")
+    lines.append("| split | " + " | ".join(str(c) for c in strat.columns) + " | total |")
     lines.append("|---|" + "---|" * (len(strat.columns) + 1))
     for split, row in strat.iterrows():
-        lines.append(f"| {split} | " + " | ".join(str(int(v) for v in row))
+        lines.append(f"| {split} | " + " | ".join(str(int(v)) for v in row)
                      + f" | {int(row.sum())} |")
     lines.append("")
     lines.append("Strata: time-in-window tercile x queue-length tercile per "
@@ -426,12 +429,23 @@ def main() -> None:
             lines.append(f"| {h['seed']} | {h['J_edf']:.3f} | {h['J_argmin']:.3f} "
                          f"| {h['J_edf'] - h['J_argmin']:+.3f} |")
         ci = headroom_ci
+        argmin_better = ci["ci_hi"] < 0  # J_edf - J_argmin > 0 with CI excluding 0
         lines.append("")
-        lines.append(f"- paired mean improvement **{ci['mean']:+.4f}**, bootstrap 95% CI "
-                     f"[{ci['ci_lo']:+.4f}, {ci['ci_hi']:+.4f}] over {ci['n']} seeds. "
-                     + ("**Headroom is small — flagged before P7.**"
-                        if abs(ci["mean"]) < 0.1 * abs(np.mean([h["J_edf"] for h in headroom_rows]))
-                        else "Substantial headroom for learned policies."))
+        lines.append(f"- paired mean improvement (J_EDF - J_argmin) **{ci['mean']:+.4f}**, "
+                     f"bootstrap 95% CI [{ci['ci_lo']:+.4f}, {ci['ci_hi']:+.4f}] over "
+                     f"{ci['n']} seeds.")
+        if argmin_better:
+            lines.append("- Substantial, significant headroom for learned policies.")
+        else:
+            lines.append(
+                "- **FLAGGED BEFORE P7 (per pre-registration): the greedy horizon-argmin "
+                "oracle does NOT beat EDF on trajectory J** (mean favors EDF; CI spans "
+                "zero). Interpretation: optimizing the 20-arrival horizon J greedily at "
+                "every state is myopic w.r.t. trajectory J, and 69.5% of states have "
+                "<=1 feasible candidate, so most states carry no decision freedom. The "
+                "learnable signal is per-state rollout regret; expectations that V1 "
+                "beats EDF's closed-loop trajectory J should be tempered accordingly — "
+                "this is exactly what the P7 gate will test.")
         lines.append(f"- argmin policy wall: {np.mean([h['wall_argmin_s'] for h in headroom_rows]):.0f} "
                      "s/seed (labels computed live at every decision point).")
 
