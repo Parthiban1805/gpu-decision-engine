@@ -8,8 +8,23 @@ import time
 
 from gde.decisions.candidates import build_candidates
 from gde.decisions.policy_gate import PolicyGate
-from gde.features.state_builder import build_feature_matrix
+from gde.features.state_builder import FEATURE_COLUMNS, build_feature_matrix
 from gde.simulator.engine import Engine, DecisionView, Policy
+
+
+class MlpScorerAdapter:
+    """Adapt SetEncoderScorer to the scores(rows) interface ModelPolicy uses."""
+
+    def __init__(self, model) -> None:
+        self.model = model
+        self.name = "mlp"
+
+    def scores(self, rows: list[dict]) -> list[float]:
+        import torch
+        x = torch.tensor([[float(r.get(c, 0.0)) for c in FEATURE_COLUMNS]
+                          for r in rows], dtype=torch.float32).unsqueeze(0)
+        mask = torch.ones(1, x.size(1), dtype=torch.bool)
+        return self.model.scores(x, mask)[0].tolist()
 
 
 class ModelPolicy(Policy):

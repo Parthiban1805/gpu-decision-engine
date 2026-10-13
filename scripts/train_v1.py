@@ -60,8 +60,11 @@ def _run_policy(args: tuple) -> dict:
         lat = None
         fallbacks = 0
     else:
-        scorer = (GbmScorer.load(Path(model_paths["gbm"]))
-                  if kind == "v1_gbm" else load_mlp(Path(model_paths["mlp"])))
+        from gde.models.model_policy import MlpScorerAdapter
+        if kind == "v1_gbm":
+            scorer = GbmScorer.load(Path(model_paths["gbm"]))
+        else:
+            scorer = MlpScorerAdapter(load_mlp(Path(model_paths["mlp"])))
         policy = ModelPolicy(scorer)
         engine = Engine(jobs + overlay, cluster, policy, arrival_horizon=t_sim)
         policy.bind(engine)
@@ -225,6 +228,65 @@ def main() -> None:
     if fb:
         lines.append(f"- policy-gate fallbacks: {sum(fb)} total across runs "
                      f"(invalid/low-confidence recommendations re-routed to EDF).")
+
+    # ---- diagnosis (PLAN P7: labels, features, horizon, tau) ------------------
+    import pandas as pd
+    labels = pd.read_parquet(PARQUET)
+    wait_j = labels[labels["is_wait"] == 1]["J"].mean()
+    run_j = labels[labels["is_wait"] == 0]["J"].mean()
+    wait_v = labels[labels["is_wait"] == 1]["V"].mean()
+    run_v = labels[labels["is_wait"] == 0]["V"].mean()
+    model_wait_rate = metrics[v1_kind.split("_")[1]]["val"]["picks"].get("WAIT", 0.0)
+    wait_label_rate = float((labels.groupby("state_id")["hard_label"].first() == "WAIT").mean())
+    # EDF regret when the label says WAIT (how low-stakes the disagreement is offline)
+    edf_regret_when_wait, edf_regret_when_run = [], []
+    for _, g in labels.groupby("state_id", sort=False):
+        hard = g["hard_label"].iloc[0]
+        pick = g["edf_pick"].iloc[0]
+        sel = g[g["action_id"] == f"RUN:{pick}"] if pick else g[g["is_wait"] == 1]
+        if len(sel):
+            (edf_regret_when_wait if hard == "WAIT" else edf_regret_when_run).append(
+                float(sel["regret"].iloc[0]))
+    lines.append("")
+    lines.append("## Diagnosis (PLAN P7 requirement — measured, before any P8 work)")
+    lines.append("")
+    lines.append(f"1. **WAIT bias in the labels**: argmin == WAIT in "
+                 f"{100 * wait_label_rate:.1f}% of states; mean J of the WAIT candidate "
+                 f"({wait_j:.3f}) vs mean J of RUN candidates ({run_j:.3f}). The V term "
+                 f"is the driver: mean V(WAIT) = {wait_v:.3f} vs V(RUN) = {run_v:.3f} — "
+                 "admitting a job starts its deadline clock INSIDE the horizon while "
+                 "deferring pushes misses past it; the pre-registered TP counts "
+                 "remaining WORK but not future lateness. Delaying looks cheaper "
+                 "than it is trajectory-wide (consistent with the P6 headroom flag: "
+                 "greedy horizon-argmin loses to EDF closed-loop).")
+    lines.append(f"2. **Model mirrors the bias**: V1 picks WAIT in "
+                 f"{100 * model_wait_rate:.1f}% of val states; closed-loop utilization "
+                 "drops (0.648 vs EDF 0.686 on capped-1h) and waits/misses rise — "
+                 "the offline regret advantage (0.534 vs 0.694) does not transfer.")
+    lines.append(f"3. **Low decision freedom**: 69.5% of labeled states have <= 1 "
+                 "feasible candidate (P6 card); effective train signal comes from "
+                 "~30% of states, and online compounding amplifies small deviations "
+                 "from EDF's ordering.")
+    if edf_regret_when_wait:
+        lines.append(f"4. **Offline stakes of the disagreement are small**: when the "
+                     f"label is WAIT, EDF's pick has mean rollout regret "
+                     f"{np.mean(edf_regret_when_wait):.3f} (vs "
+                     f"{np.mean(edf_regret_when_run):.3f} when it is not) — the label "
+                     "says WAIT is better by a small horizon-local margin, but "
+                     "trajectory-level the deviations accumulate against V1.")
+    lines.append(f"5. **Distribution shift on stress-24h**: trained only on capped-1h "
+                 "states (queues ~1-20); stress queues reach thousands — V1's J "
+                 "degrades far more than EDF's (1231.7 vs 588.4), as pre-registered "
+                 "(stress was never labeled).")
+    lines.append("")
+    lines.append("**Next-step options (for the user, not executed):** (a) revise the "
+                 "label objective so deferring incurs the same lateness accounting as "
+                 "admitting (count future lateness of pending jobs at horizon, or "
+                 "extend the V term with an SLO/deadline-risk estimate on pending "
+                 "jobs) — a label-design change requiring a pre-registered amendment "
+                 "and re-labeling; (b) horizon ablation (n_arrivals 20 -> 60) to test "
+                 "myopia directly; (c) tau ablation; (d) accept V1-negative result and "
+                 "carry the honest finding into P8 reporting.")
 
     out = REPORTS / "p7" / "report.md"
     out.parent.mkdir(parents=True, exist_ok=True)

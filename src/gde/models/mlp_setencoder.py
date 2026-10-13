@@ -95,6 +95,10 @@ def train_mlp(train_rows, val_rows, epochs: int = 60, batch_states: int = 256,
         if nll < best_nll:
             best_nll, best_t = nll, float(t)
     model.temperature = best_t
+    # tiny model: train on the resolved device (GPU per conventions), then
+    # move to CPU for decision-time scoring and serialization
+    model = model.to("cpu")
+    model.eval()
     return model, {"val_nll": best_nll, "temperature": best_t}
 
 
