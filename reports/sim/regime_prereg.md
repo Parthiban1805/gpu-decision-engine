@@ -175,3 +175,26 @@ trajectories, labels them (Amendment-4 objective), aggregates with the
 round-0 dataset, retrains GBM+MLP, evaluates on validation; early stop when
 the Amendment-5 pass rule holds; test and fresh-headline seeds untouched
 until a final user-reviewed headline run. (~30 min/round on 7 workers.)
+
+## Amendment 6 (2026-10-13, user-approved DAgger plan with changes, BEFORE running anything)
+
+Supersedes the Amendment-5 proposal where they differ:
+
+1. **Headroom check first.** The oracle policy — greedy argmin with the
+   frozen **SJF** rollout and the Amendment-4 objective — runs closed-loop on
+   the new validation windows. If it does not beat SJF on mean J (paired
+   bootstrap 95% CI excluding 0), **STOP and report; DAgger is not run.**
+2. **New validation set: 45 new capped-1h windows** (seeds 35001–35045 with
+   one Amendment-1 replacement 35007→36007, verified before this commit;
+   never used for test, fresh-headline, training or any earlier phase; ≥30
+   required). **EDF, SJF and V1-WC are re-evaluated on these same windows**
+   so every comparison shares them.
+3. **DAgger:** up to 3 rounds, rollout = SJF (frozen), ~600 multi-candidate
+   states per round from the current policy's own train-split trajectories,
+   early stop when the Amendment-5 pass rule holds on the new validation
+   windows. **No further amendments after round 3.**
+4. **Per-round reporting:** J vs EDF and SJF with paired 95% CIs, pre-mask
+   WAIT rate, utilization, overlay SLO miss, dataset size.
+5. **Untouched:** test split and the Amendment-4 fresh headline seeds until
+   the user reviews the last validation commit. Commit and push after each
+   stage.

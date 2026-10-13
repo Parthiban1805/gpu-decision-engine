@@ -201,6 +201,41 @@ p6_labeling:
     final: one headline evaluation on the Amendment-4 fresh seeds after the
       user reviews the last validation commit
 
+  # AMENDMENT 6 (2026-10-13, user-approved DAgger plan with changes,
+  # BEFORE running anything). Supersedes the proposal above where they differ.
+  amendment6_dagger:
+    headroom_check_first:
+      policy: greedy argmin oracle with the FROZEN SJF rollout and the
+        Amendment-4 objective, closed loop
+      windows: the 45 new validation windows below
+      pass: beats SJF on mean J, paired bootstrap 95% CI excluding 0 on the
+        favorable side
+      on_fail: STOP and report; DAgger is not run
+    validation_set:                  # 45 NEW capped-1h windows, verified before
+      seeds: [35001, 35002, 35003, 35004, 35005, 35006, 36007, 35008, 35009,
+              35010, 35011, 35012, 35013, 35014, 35015, 35016, 35017, 35018,
+              35019, 35020, 35021, 35022, 35023, 35024, 35025, 35026, 35027,
+              35028, 35029, 35030, 35031, 35032, 35033, 35034, 35035, 35036,
+              35037, 35038, 35039, 35040, 35041, 35042, 35043, 35044, 35045]
+      note: >
+        >= 30 required; 45 delivered (one Amendment-1 replacement 35007->36007);
+        never used for test, fresh headline, training or any earlier phase
+      reevaluate: [edf, sjf, v1_wc]  # same windows for all comparisons
+    dagger:
+      max_rounds: 3
+      rollout_policy: sjf             # frozen (better of EDF/SJF on validation,
+      #                                measured in the baselines stage)
+      states_per_round: 600           # multi-candidate, from the CURRENT policy's
+      #                                own trajectories on train-split windows
+      early_stop: Amendment-5 pass rule on the new validation windows
+      no_further_amendments: after round 3 no more objective/label/policy-rule
+        amendments are accepted for V1
+    per_round_reporting: J vs EDF and SJF with paired 95% CIs, pre-mask WAIT
+      rate, utilization, overlay SLO miss, dataset size
+    untouched: test split and the Amendment-4 fresh headline seeds remain
+      untouched until the user reviews the last validation commit
+    commits: commit and push after each stage (headroom, baselines, each round)
+
 p7_gate:
   statement: >
     V1 must BEAT the best heuristic on the primary TEST split and be NO WORSE
