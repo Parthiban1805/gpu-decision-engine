@@ -146,3 +146,32 @@ This is the **one and only allowed label revision**:
 
 Outcome of this revision (relabel → precondition gate → retrain only on
 pass) is reported with all numbers, including negatives.
+
+## Amendment 5 (2026-10-13, after the second P7 gate failure and accepted diagnosis, BEFORE running anything)
+
+**Policy layer only — no label or objective changes.**
+
+1. **Work-conserving ModelPolicy** ("model + work-conserving rule" in every
+   report and table): if any candidate job fits, WAIT is masked out of the
+   candidate set given to the model — the model only ranks fitting jobs.
+   WAIT remains the only option when nothing fits. Checkpoints and labels
+   unchanged; V1-WC reuses the Amendment-4 V1 selection (GBM).
+2. **Pass rule:** on validation windows, V1-WC must beat **EDF and SJF** on
+   mean trajectory J (paired per-window diffs, bootstrap 95% CI reported);
+   beat = CI excludes 0 on the favorable side. **SJF appears explicitly in
+   all tables.**
+3. **Reporting:** model WAIT rate *before* masking, utilization, overlay SLO
+   miss.
+4. **Sequencing:** Stage 1 = validation, committed before Stage 2 = final
+   headline on the existing fresh windows (Amendment 4 seeds 34001–34010
+   with replacements). Nothing else is evaluated in between.
+5. **On fail:** stop and report; no further model work.
+
+**DAgger plan — PROPOSED, awaits explicit user OK, not executed:** 3 rounds
+max; rollout policy = better of EDF/SJF by mean J on validation, measured
+once at round 0 and frozen; each round runs the current policy on
+train-split windows, samples ~600 multi-candidate states from its own
+trajectories, labels them (Amendment-4 objective), aggregates with the
+round-0 dataset, retrains GBM+MLP, evaluates on validation; early stop when
+the Amendment-5 pass rule holds; test and fresh-headline seeds untouched
+until a final user-reviewed headline run. (~30 min/round on 7 workers.)

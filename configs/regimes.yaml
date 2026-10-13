@@ -161,6 +161,46 @@ p6_labeling:
       453.8 rollouts/s (P6 card); tau recomputed per Amendment 3 on the
       revised train labels
 
+  # AMENDMENT 5 (2026-10-13, after the second P7 gate failure and accepted
+  # diagnosis, BEFORE running anything). Policy layer only.
+  amendment5_work_conserving:
+    rule: >
+      Work-conserving ModelPolicy ("model + work-conserving rule" in every
+      report/tables): if any candidate job fits, WAIT is MASKED OUT of the
+      candidate set given to the model; the model only ranks fitting jobs.
+      WAIT remains the only option when nothing fits. Labels, objective and
+      checkpoints are UNCHANGED (no retraining for the rule itself; V1-WC
+      reuses the Amendment-4 V1 selection).
+    pass_rule: >
+      On VALIDATION windows, V1-WC must beat EDF AND SJF on mean trajectory J
+      (paired per-window diffs, bootstrap 95% CI reported). SJF appears
+      explicitly in all tables. Beat = CI excludes 0 on the favorable side.
+    reporting: model WAIT rate BEFORE masking, utilization, overlay SLO miss.
+    sequencing: >
+      Stage 1 = validation; its result is committed before Stage 2. Stage 2 =
+      final headline on the EXISTING fresh windows (Amendment 4 seeds
+      34001-34010) only; no other new evaluations before the validation
+      commit.
+    on_fail: stop and report; no further model work.
+    dagger_plan_status: PROPOSED BELOW — awaits explicit user OK; not executed.
+
+  amendment5_dagger_plan_proposal:      # NOT executed until the user approves
+    rounds: 3
+    rollout_policy: better of EDF/SJF by mean J on validation windows,
+      measured once at round 0 and frozen for all rounds
+    per_round: >
+      run the current policy closed-loop on TRAIN-split windows (seed list
+      from regimes.yaml with Amendment-1 replacements); sample ~600
+      multi-candidate states from ITS OWN trajectories (same stratification);
+      label with the frozen rollout policy and Amendment-4 objective;
+      aggregate with the round-0 dataset; retrain GBM+MLP; evaluate on val.
+    stop_rule: >
+      stop early when the Amendment-5 pass rule holds on validation;
+      never touch test or fresh-headline seeds during iterations
+    budget_note: ~600 states/round at ~2.2 ms/rollout ~= 30 min/round on 7 workers
+    final: one headline evaluation on the Amendment-4 fresh seeds after the
+      user reviews the last validation commit
+
 p7_gate:
   statement: >
     V1 must BEAT the best heuristic on the primary TEST split and be NO WORSE
