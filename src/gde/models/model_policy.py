@@ -29,16 +29,26 @@ class MlpScorerAdapter:
 
 class ModelPolicy(Policy):
     def __init__(self, scorer, gate: PolicyGate | None = None, k: int = 16,
-                 min_confidence: float | None = None) -> None:
-        """scorer: object with .scores(rows: list[dict]) -> list[float]."""
+                 min_confidence: float | None = None,
+                 work_conserving: bool = False) -> None:
+        """scorer: object with .scores(rows: list[dict]) -> list[float].
+
+        work_conserving=True implements the pre-registered Amendment 5 rule:
+        when any candidate job fits, WAIT is masked out of the candidate set
+        given to the scorer (the model only ranks fitting jobs); WAIT remains
+        the only option when nothing fits."""
         self.scorer = scorer
         self.gate = gate or PolicyGate(min_confidence=min_confidence)
         self.k = k
+        self.work_conserving = work_conserving
         self.engine: Engine | None = None
         self.latencies_ms: list[float] = []
         self.fallbacks = 0
         self.decisions = 0
-        self.name = f"model:{type(scorer).__name__}"
+        self.pre_mask_wait_picks = 0   # Amendment 5 reporting: raw argmax == WAIT
+        self.wait_returns = 0          # WAIT actually returned (nothing fit)
+        self.name = (f"model:{type(scorer).__name__}"
+                     + ("+wc" if work_conserving else ""))
 
     def bind(self, engine: Engine) -> None:
         self.engine = engine
@@ -49,10 +59,22 @@ class ModelPolicy(Policy):
         candidates = build_candidates(view, k=self.k)
         rows = build_feature_matrix(view, candidates)
         scores = self.scorer.scores(rows)
+        self.decisions += 1
         best_idx = max(range(len(scores)), key=lambda i: scores[i])
+        if candidates.candidates[best_idx].action_id == "WAIT":
+            self.pre_mask_wait_picks += 1
+
+        if self.work_conserving:
+            run_idx = [i for i, c in enumerate(candidates.candidates)
+                       if c.job_id is not None]
+            if run_idx:  # something fits -> WAIT masked out (Amendment 5)
+                best_idx = max(run_idx, key=lambda i: scores[i])
+            else:
+                self.wait_returns += 1
+                self.latencies_ms.append((time.perf_counter() - t0) * 1000.0)
+                return None
         recommended = candidates.candidates[best_idx]
         job_id = recommended.job_id  # None for WAIT
-        self.decisions += 1
         result = self.gate.gate(job_id, view, self.engine.state.cluster,
                                 self.engine.state.jobs,
                                 confidence=scores[best_idx])

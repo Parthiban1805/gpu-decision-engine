@@ -3,7 +3,12 @@ val/test, then CLOSED-LOOP on the primary TEST split and the stress track
 against EDF and SJF (Amendment 2 gate: beat both on primary TEST; no worse
 than min-J(EDF,SJF) on stress). Paired bootstrap CIs. Regime tags everywhere.
 
-Re-run: python tasks.py train-v1
+Amendment 5 staged mode (--stage val|headline): evaluates the MODEL +
+WORK-CONSERVING RULE on validation windows first; the headline stage on the
+fresh windows refuses to run until the validation result is committed
+(wc_val.json with pass=True must exist).
+
+Re-run: python tasks.py train-v1 [--stage val|headline]
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from gde.evaluation.benchmark import load_regimes, make_overlay_cfg, regime_spec
 from gde.labeling.dataset_builder import replace_degenerate_seeds
 from gde.labeling.objective import load_preset, trajectory_objective
 from gde.models.gbm import GbmScorer
-from gde.models.model_policy import ModelPolicy
+from gde.models.model_policy import ModelPolicy, MlpScorerAdapter
 from gde.models.mlp_setencoder import load_mlp
 from gde.models.train import train_v1
 from gde.paths import CHECKPOINTS, CONFIGS, DATA, REPORTS
@@ -31,6 +36,7 @@ from gde.simulator.engine import Engine
 from gde.simulator.workload import TraceConfig, generate_overlay, load_trace_window
 
 PARQUET = DATA / "labels" / "p6_primary.parquet"
+WC_VAL_JSON = REPORTS / "p7" / "wc_val.json"
 
 
 def _fmt(x, d=3):
@@ -39,7 +45,7 @@ def _fmt(x, d=3):
 
 def _run_policy(args: tuple) -> dict:
     """Closed-loop trajectory J for one (policy-kind, regime, seed)."""
-    kind, regime_name, seed, model_paths = args
+    kind, regime_name, seed, model_paths = args[:4]
     spec = regime_spec(load_regimes(), regime_name)
     import yaml as _y
     overlay_raw = _y.safe_load((CONFIGS / "sim_p3.yaml").read_text(encoding="utf-8"))["overlay"]
@@ -53,6 +59,7 @@ def _run_policy(args: tuple) -> dict:
                                   make_overlay_cfg(overlay_raw, 0.25), seed=seed)
     const = load_preset("balanced")
     t_sim = tman["t_sim_s"]
+    pre_mask_wait_rate = None
     if kind in ("edf", "sjf", "fifo"):
         policy = ALL_POLICIES[kind]()
         result = Engine(jobs + overlay, cluster, policy, arrival_horizon=t_sim).run()
@@ -60,25 +67,29 @@ def _run_policy(args: tuple) -> dict:
         lat = None
         fallbacks = 0
     else:
-        from gde.models.model_policy import MlpScorerAdapter
-        if kind == "v1_gbm":
+        wc = kind.endswith("_wc")
+        base_kind = kind[:-3] if wc else kind
+        if base_kind == "v1_gbm":
             scorer = GbmScorer.load(Path(model_paths["gbm"]))
         else:
             scorer = MlpScorerAdapter(load_mlp(Path(model_paths["mlp"])))
-        policy = ModelPolicy(scorer)
+        policy = ModelPolicy(scorer, work_conserving=wc)
         engine = Engine(jobs + overlay, cluster, policy, arrival_horizon=t_sim)
         policy.bind(engine)
         result = engine.run()
         j = trajectory_objective(result.state, const, t_sim)["J"]
         lat = float(np.median(policy.latencies_ms)) if policy.latencies_ms else None
         fallbacks = policy.fallbacks
+        pre_mask_wait_rate = (policy.pre_mask_wait_picks / policy.decisions
+                              if policy.decisions else None)
     return {"kind": kind, "regime": regime_name, "seed": seed, "J": j,
             "wait_p50_s": result.summary["groups"]["trace"]["wait_s_p50"],
             "dl_miss": result.summary["groups"]["trace"]["deadline_miss_rate"],
             "slo_miss": result.summary["groups"]["overlay"].get("slo_miss_rate"),
             "util": result.summary["cluster"]["utilization_arrival_window"],
             "decisions": len(policy.latencies_ms) if kind.startswith("v1") else None,
-            "latency_ms": lat, "fallbacks": fallbacks}
+            "latency_ms": lat, "fallbacks": fallbacks,
+            "pre_mask_wait_rate": pre_mask_wait_rate}
 
 
 def paired_ci(diffs, n=2000, alpha=0.05):
@@ -95,8 +106,133 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=max(1, (__import__("os").cpu_count() or 4) - 1))
     parser.add_argument("--skip-train", action="store_true",
                         help="reuse checkpoints/v1 and only re-evaluate")
+    parser.add_argument("--stage", choices=["full", "val", "headline"], default="full",
+                        help="Amendment 5 staged evaluation: val first, headline "
+                             "only after the val result is committed (wc_val.json)")
     args = parser.parse_args()
     regimes = load_regimes()
+
+    if args.stage in ("val", "headline"):
+        run_staged(args, regimes)
+        return
+    run_full(args, regimes)
+
+
+def _stage_seeds(regimes: dict):
+    spec = regime_spec(regimes, "capped-1h")
+    cluster = ClusterSpec.from_yaml(CONFIGS / spec["cluster"])
+    val_seeds, _ = replace_degenerate_seeds(
+        regimes["splits"]["split_seeds"]["val"], cluster, 3600.0,
+        float(spec["duration_cap_s"]),
+        DATA / "processed" / f"{spec['dataset']}.parquet")
+    headline_seeds = regimes["p6_labeling"]["amendment4_label_revision"]["headline_seeds"]
+    return val_seeds, headline_seeds
+
+
+def run_staged(args, regimes: dict) -> None:
+    model_paths = {"gbm": str(CHECKPOINTS / "v1" / "gbm.txt"),
+                   "mlp": str(CHECKPOINTS / "v1" / "mlp.pt")}
+    val_seeds, headline_seeds = _stage_seeds(regimes)
+
+    if args.stage == "headline":
+        if not WC_VAL_JSON.exists():
+            raise SystemExit("Amendment 5 sequencing: run --stage val and commit "
+                             "its result first (wc_val.json missing).")
+        verdict = json.loads(WC_VAL_JSON.read_text(encoding="utf-8"))
+        if not verdict.get("pass"):
+            raise SystemExit("Amendment 5: validation FAILED — headline stage is "
+                             "not allowed; stop and report.")
+        seeds = headline_seeds
+        stage_label = ("Final headline — model + work-conserving rule on the FRESH "
+                       "windows (Amendment 4 seeds, never used anywhere before)")
+    else:
+        seeds = val_seeds
+        stage_label = ("Stage 1 — model + work-conserving rule on VALIDATION windows "
+                       "(Amendment 5 pass rule)")
+
+    kinds = ["v1_wc", "edf", "sjf"]
+    cells = [(k, "capped-1h", s, model_paths) for k in kinds for s in seeds]
+    print(f"{args.stage}: {len(cells)} closed-loop runs", flush=True)
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        rows = list(pool.map(_run_policy, cells))
+
+    def J_of(kind):
+        return {r["seed"]: r["J"] for r in rows if r["kind"] == kind}
+
+    def paired(a_kind, b_kind):
+        a, b = J_of(a_kind), J_of(b_kind)
+        seeds = sorted(set(a) & set(b))
+        return paired_ci([a[s] - b[s] for s in seeds])
+
+    ci_edf = paired("v1_wc", "edf")
+    ci_sjf = paired("v1_wc", "sjf")
+    beat = lambda ci: ci["ci_hi"] < 0
+    stage_pass = beat(ci_edf) and beat(ci_sjf)
+
+    lines: list[str] = []
+    lines.append(f"# Amendment 5 {args.stage}: {stage_label}")
+    lines.append("")
+    lines.append(f"Generated {time.strftime('%Y-%m-%dT%H:%M:%S')} by "
+                 f"`python tasks.py train-v1 --stage {args.stage}`. Policy: "
+                 "**model + work-conserving rule** (WAIT masked out whenever any "
+                 "candidate fits; policy layer only, labels/objective/checkpoints "
+                 "unchanged per Amendment 5). Disclosures: 64% of offered work "
+                 "excluded by the 6 h cap; deadlines/SLOs/VRAM synthetic; "
+                 "batch_inference = short-small proxy. Regime tag: capped-1h.")
+    lines.append("")
+    lines.append("| policy | J (mean) | wait p50 h | DL miss | SLO miss | util |")
+    lines.append("|---|---|---|---|---|---|")
+    for kind in kinds:
+        rs = [r for r in rows if r["kind"] == kind]
+        lines.append(f"| {kind} | {_fmt(np.mean([r['J'] for r in rs]), 4)} "
+                     f"| {_fmt(np.mean([r['wait_p50_s'] for r in rs]) / 3600, 2)} "
+                     f"| {_fmt(np.mean([r['dl_miss'] for r in rs]))} "
+                     f"| {_fmt(np.mean([r['slo_miss'] for r in rs if r['slo_miss'] is not None]))} "
+                     f"| {_fmt(np.mean([r['util'] for r in rs]))} |")
+    lines.append("")
+    lines.append("## Pass rule (Amendment 5): beat EDF AND SJF, paired 95% CI")
+    lines.append("")
+    lines.append(f"- vs EDF: mean diff {ci_edf['mean']:+.4f}, 95% CI "
+                 f"[{ci_edf['ci_lo']:+.4f}, {ci_edf['ci_hi']:+.4f}] -> "
+                 f"**{'BEAT' if beat(ci_edf) else 'NOT beaten'}**")
+    lines.append(f"- vs SJF: mean diff {ci_sjf['mean']:+.4f}, 95% CI "
+                 f"[{ci_sjf['ci_lo']:+.4f}, {ci_sjf['ci_hi']:+.4f}] -> "
+                 f"**{'BEAT' if beat(ci_sjf) else 'NOT beaten'}**")
+    lines.append(f"- **STAGE VERDICT: {'PASS' if stage_pass else 'FAIL'}**")
+    wc_rows = [r for r in rows if r["kind"] == "v1_wc"]
+    pmw = [r["pre_mask_wait_rate"] for r in wc_rows if r["pre_mask_wait_rate"] is not None]
+    if pmw:
+        lines.append("")
+        lines.append("## Amendment 5 reporting items")
+        lines.append("")
+        lines.append(f"- model WAIT rate BEFORE masking: mean "
+                     f"{100 * float(np.mean(pmw)):.1f}% of decision points "
+                     "(raw argmax over the unmasked candidate set)")
+        lines.append(f"- utilization: V1-WC {_fmt(np.mean([r['util'] for r in wc_rows]))} "
+                     f"vs EDF {_fmt(np.mean([r['util'] for r in rows if r['kind'] == 'edf']))} "
+                     f"vs SJF {_fmt(np.mean([r['util'] for r in rows if r['kind'] == 'sjf']))}")
+        lines.append(f"- overlay SLO miss: V1-WC "
+                     f"{_fmt(np.mean([r['slo_miss'] for r in wc_rows if r['slo_miss'] is not None]))} "
+                     f"vs EDF {_fmt(np.mean([r['slo_miss'] for r in rows if r['kind'] == 'edf' and r['slo_miss'] is not None]))} "
+                     f"vs SJF {_fmt(np.mean([r['slo_miss'] for r in rows if r['kind'] == 'sjf' and r['slo_miss'] is not None]))}")
+
+    out_md = REPORTS / "p7" / f"wc_{args.stage}.md"
+    out_md.parent.mkdir(parents=True, exist_ok=True)
+    out_md.write_text("\n".join(lines), encoding="utf-8")
+    if args.stage == "val":
+        WC_VAL_JSON.write_text(json.dumps({
+            "pass": bool(stage_pass), "ci_edf": ci_edf, "ci_sjf": ci_sjf,
+            "rows": rows}, indent=2, default=str), encoding="utf-8")
+        print(f"val verdict: {'PASS' if stage_pass else 'FAIL'} — commit this "
+              f"result before --stage headline")
+    else:
+        print("headline written (validation had passed)")
+    print(f"report: {out_md}")
+    if not stage_pass:
+        raise SystemExit(f"Amendment 5 {args.stage} stage FAILED — stop and report")
+
+
+def run_full(args, regimes: dict) -> None:
     exp = yaml.safe_load((CONFIGS / "experiment_p6.yaml").read_text(encoding="utf-8"))
 
     # ---- train (or load) ----------------------------------------------------
