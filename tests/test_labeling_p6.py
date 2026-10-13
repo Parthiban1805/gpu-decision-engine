@@ -100,6 +100,32 @@ def test_terminal_penalty_true_vs_estimate():
     assert tp_est2 == pytest.approx(2.0 * tp_true, rel=0.35)  # pending-dominated
 
 
+def test_projected_lateness_hand_case():
+    """Amendment 4: pending job with deadline 100 s, est remaining 50 s,
+    horizon end t=80 -> lateness 30 s; est-only (actual duration irrelevant);
+    running-job variant subtracts elapsed; no lateness when deadline is far."""
+    from dataclasses import replace
+
+    from gde.labeling.objective import projected_lateness_penalty
+    pending = mkjob("p", 0.0, 999.0, share=0.5, deadline_slack=100.0 / 999.0)
+    pending = replace(pending, runtime_est_s=50.0, deadline_ts=100.0)
+    cluster = ClusterSpec.homogeneous(1, vram_gb=24.0)
+    engine = Engine([pending], cluster, ALL_POLICIES["fifo"](), arrival_horizon=0.0)
+    engine.step()  # ARRIVE p
+    state = snapshot(engine.state)
+    # pending: H_end 80 + est 50 - deadline 100 = 30 s of lateness
+    assert projected_lateness_penalty(state, 80.0) == pytest.approx(
+        pending.priority * 30.0 / 3600.0)
+    assert projected_lateness_penalty(state, 40.0) == pytest.approx(0.0)  # 40+50<=100
+    # actual duration must not matter (estimates only)
+    mutated = replace(state.jobs["p"], duration_s=12345.0)
+    import dataclasses
+    state2 = snapshot(state)
+    state2.jobs["p"] = mutated
+    assert projected_lateness_penalty(state2, 80.0) == \
+        pytest.approx(projected_lateness_penalty(state, 80.0))
+
+
 def test_window_objective_math_hand_case():
     """Single 0.5-share, 1 h job finishing inside the window: C/V/T/F sanity."""
     jobs = [mkjob("a", 0.0, 3600.0, share=0.5, vram=4.0)]

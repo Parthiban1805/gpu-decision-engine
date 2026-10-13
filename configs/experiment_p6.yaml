@@ -6,9 +6,15 @@ regime: capped-1h
 overlay_share: 0.25           # labeled mix matches the P4 main comparison
 k_candidates: 16
 
-state_budget:                 # FIXED after the throughput measurement (see
-  states_per_window_scheduler: 4    # reports/p6/dataset_card.md); do not tune
-  max_states_total: 1440      # after seeing labels/model results
+state_budget:                 # Amendment 4: MULTI-CANDIDATE states only
+  states_per_window_scheduler: 9    # (n_feasible >= 2 filter applied at sampling)
+  max_states_total: 2700      # ~1620 train / ~540 val / ~540 test; fixed from
+                              # the measured 453.8 rollouts/s; do not tune
+
+precondition:                 # Amendment 4: gate BEFORE any training
+  val_seeds: null             # null -> use the val split seed list (with replacements)
+  ablation_seeds: 5           # horizon-60 and work-conserving ablations
+  ablation_label_subsample: 60
 
 headroom:                     # oracle headroom, item 2 of the dataset card
   seeds: [31501, 31002, 31003, 31004, 31005, 31506, 31007, 31008, 31009, 31010]

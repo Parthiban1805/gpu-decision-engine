@@ -79,6 +79,25 @@ def terminal_penalty(state: SimState, t_end: float, est_based: bool = False) -> 
     return total
 
 
+def projected_lateness_penalty(state: SimState, t_end: float) -> float:
+    """Amendment 4: priority-weighted PROJECTED LATENESS of jobs pending or
+    running at horizon end — max(0, horizon_end + remaining_est − deadline).
+    ESTIMATES ONLY (runtime_est_s; never actual durations). Returns
+    priority·seconds converted to priority·hours; the caller normalizes it
+    like V (÷ n_active)."""
+    total = 0.0
+    for job_id in state.pending:
+        job = state.jobs[job_id]
+        rem_s = job.load_s + job.runtime_est_s
+        total += job.priority * max(0.0, t_end + rem_s - job.deadline_ts)
+    for job_id, placement in state.cluster.placements.items():
+        job = state.jobs[job_id]
+        rem_s = max(0.0, job.load_s + job.runtime_est_s
+                    - (t_end - placement.start_ts))
+        total += job.priority * max(0.0, t_end + rem_s - job.deadline_ts)
+    return total / 3600.0
+
+
 def integral_base(state: SimState) -> tuple[float, float]:
     """Per-gpu integral sums at snapshot time; window value = final - base."""
     return (sum(g.energy_j for g in state.cluster.gpus.values()),
@@ -118,18 +137,20 @@ def window_objective(state: SimState, t0: float, t1: float,
         completion += r.priority * ((r.wait_s or 0.0) + (r.run_s or 0.0)) / 3600.0
 
     tp = terminal_penalty(state, t1, est_based=est_based_tp)
+    proj_late = projected_lateness_penalty(state, t1)   # Amendment 4, est-only
     n_active = len(finished) + len(state.pending) + len(state.cluster.placements)
 
     frags = [s.frag for s in state.samples
              if s.frag is not None and t0 <= s.t <= t1]
 
     c = cost_raw / (n_gpus * h_hours)
-    v = (lateness + const.slo_miss_penalty * slo_misses) / max(n_active, 1)
+    v = (lateness + const.slo_miss_penalty * slo_misses + proj_late) / max(n_active, 1)
     t = (completion + tp) / max(n_active, 1)
     f = (sum(frags) / len(frags)) if frags else 0.0
     j = const.w_cost * c + const.w_deadline * v + const.w_completion * t + const.w_frag * f
     return {"J": j, "C": c, "V": v, "T": t, "F": f,
-            "tp_priority_hours": tp, "slo_misses": slo_misses,
+            "tp_priority_hours": tp, "proj_late_priority_hours": proj_late,
+            "slo_misses": slo_misses,
             "lateness_priority_hours": lateness, "n_active": n_active}
 
 

@@ -119,19 +119,37 @@ def main() -> None:
         regimes["splits"]["split_seeds"]["test"], cluster, 3600.0,
         float(spec["duration_cap_s"]),
         DATA / "processed" / f"{spec['dataset']}.parquet")
+    val_seeds, _ = replace_degenerate_seeds(
+        regimes["splits"]["split_seeds"]["val"], cluster, 3600.0,
+        float(spec["duration_cap_s"]),
+        DATA / "processed" / f"{spec['dataset']}.parquet")
+    headline_seeds = regimes["p6_labeling"]["amendment4_label_revision"]["headline_seeds"]
     bench_seeds = regimes["benchmark_seeds"]
     kinds = [v1_kind, "edf", "sjf"]
     cells = [(k, "capped-1h", s, model_paths) for k in kinds for s in test_seeds]
+    cells += [(k, "capped-1h", s, model_paths, "val")
+              for k in kinds for s in val_seeds]
+    cells += [(k, "capped-1h", s, model_paths, "headline")
+              for k in kinds for s in headline_seeds]
     cells += [(k, "stress-24h", s, model_paths) for k in kinds for s in bench_seeds]
-    print(f"closed-loop: {len(cells)} runs", flush=True)
+    print(f"closed-loop: {len(cells)} runs (test/val/headline/stress)", flush=True)
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        rows = list(pool.map(_run_policy, cells))
+        rows = list(pool.map(_run_policy, [
+            c if len(c) == 4 else (c[0], c[1], c[2], c[3]) for c in cells]))
+    # tag val/headline groups (cells carry a 5th element the worker drops)
+    tag_of = {}
+    for c in cells:
+        tag_of[(c[0], c[1], c[2])] = c[4] if len(c) > 4 else "test"
+    for r in rows:
+        r["group"] = tag_of[(r["kind"], r["regime"], r["seed"])]
 
-    def J_of(kind, regime):
-        return {r["seed"]: r["J"] for r in rows if r["kind"] == kind and r["regime"] == regime}
+    def J_of(kind, regime, group="test"):
+        return {r["seed"]: r["J"] for r in rows
+                if r["kind"] == kind and r["regime"] == regime
+                and r.get("group", "test") == group}
 
-    def paired(kind_a, kind_b, regime):
-        a, b = J_of(kind_a, regime), J_of(kind_b, regime)
+    def paired(kind_a, kind_b, regime, group="test"):
+        a, b = J_of(kind_a, regime, group), J_of(kind_b, regime, group)
         seeds = sorted(set(a) & set(b))
         return paired_ci([a[s] - b[s] for s in seeds])
 
@@ -175,7 +193,8 @@ def main() -> None:
     lines.append("| policy | J (mean over seeds) | wait p50 h | DL miss | SLO miss | util |")
     lines.append("|---|---|---|---|---|---|")
     for kind in kinds:
-        rs = [r for r in rows if r["kind"] == kind and r["regime"] == "capped-1h"]
+        rs = [r for r in rows if r["kind"] == kind and r["regime"] == "capped-1h"
+              and r.get("group", "test") == "test"]
         lines.append(f"| {kind} | {_fmt(np.mean([r['J'] for r in rs]), 4)} "
                      f"| {_fmt(np.mean([r['wait_p50_s'] for r in rs]) / 3600, 2)} "
                      f"| {_fmt(np.mean([r['dl_miss'] for r in rs]))} "
@@ -193,6 +212,48 @@ def main() -> None:
                      f"| {_fmt(np.mean([r['dl_miss'] for r in rs]))} "
                      f"| {_fmt(np.mean([r['slo_miss'] for r in rs if r['slo_miss'] is not None]))} "
                      f"| {_fmt(np.mean([r['util'] for r in rs]))} |")
+    lines.append("")
+    lines.append("## Closed loop — regime: capped-1h, VALIDATION windows (Amendment 4)")
+    lines.append("")
+    lines.append("| policy | J (mean) | wait p50 h | DL miss | SLO miss | util |")
+    lines.append("|---|---|---|---|---|---|")
+    for kind in kinds:
+        rs = [r for r in rows if r["kind"] == kind and r["regime"] == "capped-1h"
+              and r.get("group") == "val"]
+        lines.append(f"| {kind} | {_fmt(np.mean([r['J'] for r in rs]), 4)} "
+                     f"| {_fmt(np.mean([r['wait_p50_s'] for r in rs]) / 3600, 2)} "
+                     f"| {_fmt(np.mean([r['dl_miss'] for r in rs]))} "
+                     f"| {_fmt(np.mean([r['slo_miss'] for r in rs if r['slo_miss'] is not None]))} "
+                     f"| {_fmt(np.mean([r['util'] for r in rs]))} |")
+    val_edf = paired(v1_kind, "edf", "capped-1h", group="val")
+    val_sjf = paired(v1_kind, "sjf", "capped-1h", group="val")
+    lines.append("")
+    lines.append(f"- val vs EDF: mean diff {val_edf['mean']:+.4f}, 95% CI "
+                 f"[{val_edf['ci_lo']:+.4f}, {val_edf['ci_hi']:+.4f}]")
+    lines.append(f"- val vs SJF: mean diff {val_sjf['mean']:+.4f}, 95% CI "
+                 f"[{val_sjf['ci_lo']:+.4f}, {val_sjf['ci_hi']:+.4f}]")
+    lines.append("")
+    lines.append("## Closed loop — regime: capped-1h, FRESH HEADLINE windows "
+                 "(Amendment 4 seeds, never used anywhere before)")
+    lines.append("")
+    lines.append("| policy | J (mean) | wait p50 h | DL miss | SLO miss | util |")
+    lines.append("|---|---|---|---|---|---|")
+    for kind in kinds:
+        rs = [r for r in rows if r["kind"] == kind and r["regime"] == "capped-1h"
+              and r.get("group") == "headline"]
+        lines.append(f"| {kind} | {_fmt(np.mean([r['J'] for r in rs]), 4)} "
+                     f"| {_fmt(np.mean([r['wait_p50_s'] for r in rs]) / 3600, 2)} "
+                     f"| {_fmt(np.mean([r['dl_miss'] for r in rs]))} "
+                     f"| {_fmt(np.mean([r['slo_miss'] for r in rs if r['slo_miss'] is not None]))} "
+                     f"| {_fmt(np.mean([r['util'] for r in rs]))} |")
+    hl_edf = paired(v1_kind, "edf", "capped-1h", group="headline")
+    hl_sjf = paired(v1_kind, "sjf", "capped-1h", group="headline")
+    lines.append("")
+    lines.append(f"- fresh vs EDF: mean diff {hl_edf['mean']:+.4f}, 95% CI "
+                 f"[{hl_edf['ci_lo']:+.4f}, {hl_edf['ci_hi']:+.4f}]")
+    lines.append(f"- fresh vs SJF: mean diff {hl_sjf['mean']:+.4f}, 95% CI "
+                 f"[{hl_sjf['ci_lo']:+.4f}, {hl_sjf['ci_hi']:+.4f}]")
+
     lines.append("")
     lines.append("## P7 gate (Amendment 2)")
     lines.append("")
@@ -229,64 +290,55 @@ def main() -> None:
         lines.append(f"- policy-gate fallbacks: {sum(fb)} total across runs "
                      f"(invalid/low-confidence recommendations re-routed to EDF).")
 
-    # ---- diagnosis (PLAN P7: labels, features, horizon, tau) ------------------
+    # ---- diagnosis (rewritten for the Amendment-4 outcome) --------------------
     import pandas as pd
     labels = pd.read_parquet(PARQUET)
     wait_j = labels[labels["is_wait"] == 1]["J"].mean()
     run_j = labels[labels["is_wait"] == 0]["J"].mean()
-    wait_v = labels[labels["is_wait"] == 1]["V"].mean()
-    run_v = labels[labels["is_wait"] == 0]["V"].mean()
     model_wait_rate = metrics[v1_kind.split("_")[1]]["val"]["picks"].get("WAIT", 0.0)
     wait_label_rate = float((labels.groupby("state_id")["hard_label"].first() == "WAIT").mean())
-    # EDF regret when the label says WAIT (how low-stakes the disagreement is offline)
-    edf_regret_when_wait, edf_regret_when_run = [], []
-    for _, g in labels.groupby("state_id", sort=False):
-        hard = g["hard_label"].iloc[0]
-        pick = g["edf_pick"].iloc[0]
-        sel = g[g["action_id"] == f"RUN:{pick}"] if pick else g[g["is_wait"] == 1]
-        if len(sel):
-            (edf_regret_when_wait if hard == "WAIT" else edf_regret_when_run).append(
-                float(sel["regret"].iloc[0]))
+    v1_util = float(np.mean([r["util"] for r in rows
+                             if r["kind"] == v1_kind and r["regime"] == "capped-1h"]))
+    edf_util = float(np.mean([r["util"] for r in rows
+                              if r["kind"] == "edf" and r["regime"] == "capped-1h"]))
+    model_name = v1_kind.split("_")[1]
     lines.append("")
-    lines.append("## Diagnosis (PLAN P7 requirement — measured, before any P8 work)")
+    lines.append("## Diagnosis (PLAN P7 requirement — measured; post-Amendment-4)")
     lines.append("")
-    lines.append(f"1. **WAIT bias in the labels**: argmin == WAIT in "
-                 f"{100 * wait_label_rate:.1f}% of states; mean J of the WAIT candidate "
-                 f"({wait_j:.3f}) vs mean J of RUN candidates ({run_j:.3f}). The V term "
-                 f"is the driver: mean V(WAIT) = {wait_v:.3f} vs V(RUN) = {run_v:.3f} — "
-                 "admitting a job starts its deadline clock INSIDE the horizon while "
-                 "deferring pushes misses past it; the pre-registered TP counts "
-                 "remaining WORK but not future lateness. Delaying looks cheaper "
-                 "than it is trajectory-wide (consistent with the P6 headroom flag: "
-                 "greedy horizon-argmin loses to EDF closed-loop).")
-    lines.append(f"2. **Model mirrors the bias**: V1 picks WAIT in "
-                 f"{100 * model_wait_rate:.1f}% of val states; closed-loop utilization "
-                 "drops (0.648 vs EDF 0.686 on capped-1h) and waits/misses rise — "
-                 "the offline regret advantage (0.534 vs 0.694) does not transfer.")
-    lines.append(f"3. **Low decision freedom**: 69.5% of labeled states have <= 1 "
-                 "feasible candidate (P6 card); effective train signal comes from "
-                 "~30% of states, and online compounding amplifies small deviations "
-                 "from EDF's ordering.")
-    if edf_regret_when_wait:
-        lines.append(f"4. **Offline stakes of the disagreement are small**: when the "
-                     f"label is WAIT, EDF's pick has mean rollout regret "
-                     f"{np.mean(edf_regret_when_wait):.3f} (vs "
-                     f"{np.mean(edf_regret_when_run):.3f} when it is not) — the label "
-                     "says WAIT is better by a small horizon-local margin, but "
-                     "trajectory-level the deviations accumulate against V1.")
-    lines.append(f"5. **Distribution shift on stress-24h**: trained only on capped-1h "
-                 "states (queues ~1-20); stress queues reach thousands — V1's J "
-                 "degrades far more than EDF's (1231.7 vs 588.4), as pre-registered "
-                 "(stress was never labeled).")
+    lines.append(f"1. **The label WAIT-bias is fixed; the policy WAIT-bias is not.** "
+                 f"argmin == WAIT in only {100 * wait_label_rate:.1f}% of states now "
+                 f"(was 46.9% pre-revision; mean J WAIT {wait_j:.3f} vs RUN "
+                 f"{run_j:.3f}). Yet V1 picks WAIT in {100 * model_wait_rate:.1f}% of "
+                 "VAL states: per-state, WAIT is CHEAP in the counterfactual because "
+                 "the EDF rollout re-admits the job at the very next decision point, "
+                 "so its measured regret stays small. A policy that generalizes to "
+                 "'WAIT often' never re-admits — each WAIT leaves the cluster idle "
+                 "until the next external event.")
+    lines.append(f"2. **Closed-loop compounding:** V1 utilization {v1_util:.3f} vs EDF "
+                 f"{edf_util:.3f} on capped-1h; wait p50 explodes. The offline regret "
+                 f"advantage ({metrics[model_name]['val']['mean_regret']:.3f} vs EDF "
+                 f"pick {metrics['baselines']['edf']['mean_regret']:.3f}) does not "
+                 "transfer: the forced-action-then-EDF counterfactual systematically "
+                 "understates the cost of a WAIT-ing policy — the covariate-shift "
+                 "problem PLAN §5.2 assigns to DAgger (P11).")
+    lines.append("3. **The signal is real but needs the work-conserving constraint** "
+                 "(pre-registered ablation, P6 card): the work-conserving argmin beats "
+                 "EDF closed-loop (J 20.24 vs 23.45 on 5 val seeds; util 0.718 vs "
+                 "0.730). Removing WAIT from the model's action space at the POLICY "
+                 "layer (labels/objective untouched) is the obvious next experiment — "
+                 "reported as an option, not executed (would need its own "
+                 "pre-registered gate run).")
+    lines.append("4. **Stress-24h collapse (J 19245, util 0.052):** trained only on "
+                 "capped-1h multi-candidate states; under stress the model WAITs at "
+                 "scale and the cluster idles — distribution shift, as pre-registered "
+                 "(stress never labeled).")
     lines.append("")
-    lines.append("**Next-step options (for the user, not executed):** (a) revise the "
-                 "label objective so deferring incurs the same lateness accounting as "
-                 "admitting (count future lateness of pending jobs at horizon, or "
-                 "extend the V term with an SLO/deadline-risk estimate on pending "
-                 "jobs) — a label-design change requiring a pre-registered amendment "
-                 "and re-labeling; (b) horizon ablation (n_arrivals 20 -> 60) to test "
-                 "myopia directly; (c) tau ablation; (d) accept V1-negative result and "
-                 "carry the honest finding into P8 reporting.")
+    lines.append("**Options for the user (not executed):** (a) work-conserving "
+                 "ModelPolicy (policy layer only; pre-registered gate run); "
+                 "(b) DAgger (P11) relabeling on the model's own state distribution; "
+                 "(c) accept the V1 negative result — per-state counterfactual labels "
+                 "with an EDF rollout undervalue admission for closed-loop control in "
+                 "this regime.")
 
     out = REPORTS / "p7" / "report.md"
     out.parent.mkdir(parents=True, exist_ok=True)

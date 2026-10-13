@@ -67,7 +67,26 @@ def replace_degenerate_seeds(seeds: list[int], cluster: ClusterSpec,
     return out, log
 
 
-def sample_states(regimes: dict, exp: dict, split: str) -> list[SampledState]:
+def _n_feasible_fast(state, cap_at: int = 2) -> int:
+    """Count feasible pending jobs, early-exiting at cap_at (Amendment 4
+    filter only needs to know whether n_feasible >= 2)."""
+    cluster = state.cluster
+    n = 0
+    for job_id in state.pending:
+        job = state.jobs[job_id]
+        if cluster.any_fit(job.n_occupied, job.share_per_gpu,
+                           job.per_gpu_vram, job.gpu_type_req):
+            n += 1
+            if n >= cap_at:
+                return n
+    return n
+
+
+def sample_states(regimes: dict, exp: dict, split: str) -> tuple[list[SampledState], dict]:
+    """Sample MULTI-CANDIDATE states (n_feasible >= 2, Amendment 4) from every
+    scheduler's trajectories, stratified by time-in-window tercile x
+    queue-length tercile. Returns (states, stats) where stats reports the
+    single-feasible share that was skipped."""
     spec = regime_spec(regimes, "capped-1h")
     cluster = ClusterSpec.from_yaml(CONFIGS / spec["cluster"])
     parquet = DATA / "processed" / f"{spec['dataset']}.parquet"
@@ -80,6 +99,7 @@ def sample_states(regimes: dict, exp: dict, split: str) -> list[SampledState]:
     overlay_raw = yaml.safe_load((CONFIGS / "sim_p3.yaml").read_text(encoding="utf-8"))["overlay"]
     overlay_cfg = make_overlay_cfg(overlay_raw, exp["overlay_share"])
 
+    stats = {"dp_with_pending": 0, "multi_candidate": 0}
     sampled: list[SampledState] = []
     for seed in seeds:
         jobs, tman = load_trace_window(
@@ -96,8 +116,12 @@ def sample_states(regimes: dict, exp: dict, split: str) -> list[SampledState]:
             while len(engine.state.queue):
                 ev = engine.state.queue.peek()
                 if ev.kind == EventKind.DECISION_POINT and engine.state.pending:
-                    points.append((engine.state.now / t_sim, len(engine.state.pending),
-                                   snapshot(engine.state)))
+                    stats["dp_with_pending"] += 1
+                    if _n_feasible_fast(engine.state) >= 2:
+                        stats["multi_candidate"] += 1
+                        points.append((engine.state.now / t_sim,
+                                       len(engine.state.pending),
+                                       snapshot(engine.state)))
                 engine.step()
             if not points:
                 continue
@@ -133,7 +157,7 @@ def sample_states(regimes: dict, exp: dict, split: str) -> list[SampledState]:
                     break
     for i, s in enumerate(sampled):
         s.state_id = f"{s.split}:{s.seed}:{s.scheduler}:{i}"
-    return sampled
+    return sampled, stats
 
 
 class _ViewHolder:

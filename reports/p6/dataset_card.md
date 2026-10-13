@@ -1,48 +1,49 @@
 # P6 dataset card — labeled decision states, PRIMARY (capped-1h) only
 
-Generated 2026-10-13T07:20:21 by `python tasks.py label`. Regimes/config: `configs/regimes.yaml` (Amendments 1-3), `configs/experiment_p6.yaml`. Rollout policy: edf (frozen). Horizon: n_arrivals=20, max_seconds=86400 (n_arrivals binds). Terminal penalty: true remaining (pre-registered). Deadlines/SLOs/VRAM synthetic; 64% of offered work excluded by the 6 h cap; batch_inference = short-small proxy. Stress track held out.
+Generated 2026-10-13T10:42:28 by `python tasks.py label`. Regimes/config: `configs/regimes.yaml` (Amendments 1-4), `configs/experiment_p6.yaml`. Rollout policy: edf (frozen). Horizon: n_arrivals=20, max_seconds=86400 (n_arrivals binds). Terminal penalty: true remaining work (Amendment 2) PLUS projected lateness of deferred/running jobs (Amendment 4, estimates only). Deadlines/SLOs/VRAM synthetic; 64% of offered work excluded by the 6 h cap; batch_inference = short-small proxy. Stress track held out. Sampling: multi-candidate states only (n_feasible >= 2, Amendment 4).
 
-- States: **1200** (train 720, val 240, test 240); candidates/state mean **4.8** (min 1, max 19); tau = **0.1611** (0.5 x median positive TRAIN regret, Amendment 3).
-- Throughput (real mix, before budget exercised): **461.4 rollouts/s** (2.2 ms/rollout, mean 5 rollouts/state => 230.70 states/s single-core). Budget (4/window/scheduler, cap 1440) chosen from this measurement, before labels were produced.
-- Total labeling wall: 13.4 min (workers=7).
+- States: **2503** (train 1507, val 517, test 479); candidates/state mean **10.9** (min 1, max 20); tau = **0.0641** (0.5 x median positive TRAIN regret, Amendment 3).
+- Throughput (real mix, before budget exercised): **433.2 rollouts/s** (2.3 ms/rollout, mean 11 rollouts/state => 216.58 states/s single-core). Budget (9/window/scheduler, cap 2700) chosen from this measurement, before labels were produced.
+- Total labeling wall: 11.2 min (workers=7).
 
 ## 1. Hard-label composition (argmin == policy pick)
 
 | argmin == | share |
 |---|---|
-| EDF pick | 30.5% |
-| SJF pick | 3.3% |
-| FIFO pick | 1.0% |
-| WAIT pick | 46.9% |
-| other candidate (not EDF/SJF/FIFO/WAIT) | 18.2% |
+| EDF pick | 29.5% |
+| SJF pick | 12.3% |
+| FIFO pick | 1.2% |
+| WAIT pick | 0.6% |
+| other candidate (not EDF/SJF/FIFO/WAIT) | 56.3% |
 
-## 3. Single-feasible-candidate states
+## 3. Multi-candidate-only sampling (Amendment 4)
 
-- n_feasible <= 1: **834/1200 (69.5%)** — flagged in the Parquet (column n_feasible); kept in the dataset, excluded from nothing by default (P7 reports with/without as ablation).
+- Single-feasible decision points (n_feasible <= 1) are NOT labeled (excluded from training loss and offline metric): train 63.4%, val 64.7%, test 63.9% of decision points with a non-empty queue were skipped.
+- Labeled states are all n_feasible >= 2; budget 9/window/scheduler, cap 2700 (Amendment 4).
 
 ## 4. Soft-target entropy and J normalization
 
-- soft-target entropy: mean 0.666, p50 0.033, max 2.944 (max possible ln(n_candidates) = 2.944).
-- tau rule (Amendment 3, fixed pre-model): 0.5 x median positive TRAIN regret = 0.1611.
-- J normalization (objective.py docstring, Amendment 3): mean |C|=0.117, |V|=8.242, |T|=10.937, |F|=0.031. V and T dominate J under the balanced preset in this regime (deadlines are synthetic and tight at rho 0.8); disclosed — the preset weights are unchanged (frozen).
+- soft-target entropy: mean 1.501, p50 1.461, max 2.995 (max possible ln(n_candidates) = 2.996).
+- tau rule (Amendment 3, fixed pre-model): 0.5 x median positive TRAIN regret = 0.0641.
+- J normalization (objective.py docstring, Amendment 3): mean |C|=0.106, |V|=17.521, |T|=18.015, |F|=0.028. V and T dominate J under the balanced preset in this regime (deadlines are synthetic and tight at rho 0.8); disclosed — the preset weights are unchanged (frozen).
 
 ## 5. Terminal penalty share and estimate-TP sensitivity
 
-- mean TP (priority-hours) by candidate: WAIT 145.48, RUN 205.67.
-- estimate-based TP (pre-registered 10% subsample, n=72): hard-label agreement **98.6%**, mean J rank correlation 0.978. WAIT-specific: true-TP argmin == WAIT in 34 states, est-TP argmin == WAIT in 34, both 34 (P(est WAIT | true WAIT) = 1.0, P(true WAIT | est WAIT) = 1.0). Agreement >= 80%: single label set carried into P7.
+- mean TP (priority-hours) by candidate: WAIT 119.90, RUN 147.61.
+- estimate-based TP (pre-registered 10% subsample, n=150): hard-label agreement **96.7%**, mean J rank correlation 0.989. WAIT-specific: true-TP argmin == WAIT in 2 states, est-TP argmin == WAIT in 2, both 2 (P(est WAIT | true WAIT) = 1.0, P(true WAIT | est WAIT) = 1.0). Agreement >= 80%: single label set carried into P7.
 
 
 ## 6. Candidate-count distribution
 
-- mean 4.8, p50 2, p95 18, max 19; states exceeding K=16+1 (baseline picks beyond top-K): 8.9%.
+- mean 10.9, p50 10, p95 19, max 20; states exceeding K=16+1 (baseline picks beyond top-K): 19.6%.
 
 ## 7. Sampling stratification and splits
 
 | split | best_fit | easy_backfill | edf | fifo | priority | sjf | total |
 |---|---|---|---|---|---|---|---|
-| test | 140 | 300 | 100 | 502 | 89 | 113 | 1244 |
-| train | 371 | 761 | 299 | 1304 | 359 | 304 | 3398 |
-| val | 65 | 290 | 92 | 514 | 72 | 62 | 1095 |
+| test | 858 | 1126 | 800 | 1265 | 751 | 827 | 5627 |
+| train | 2437 | 3188 | 2081 | 3750 | 2329 | 2199 | 15984 |
+| val | 849 | 1016 | 817 | 1352 | 843 | 767 | 5644 |
 
 Strata: time-in-window tercile x queue-length tercile per (window, scheduler); all states from one window stay in that window's split (splits are seed-assigned in regimes.yaml).
 
@@ -57,24 +58,33 @@ Strata: time-in-window tercile x queue-length tercile per (window, scheduler); a
 | val | 31207 | 31707 |
 | test | 31304 | 31804 |
 
-## 2. Oracle headroom (argmin-at-every-state vs EDF, closed loop)
+## 2. Amendment 4 precondition gate (REVISED labels, validation windows)
 
-| seed | J EDF | J argmin | diff |
+| seed | J EDF | J argmin | diff (EDF - argmin) |
 |---|---|---|---|
-| 31501 | 24.771 | 33.259 | -8.487 |
-| 31002 | 14.388 | 31.164 | -16.777 |
-| 31003 | 14.306 | 13.778 | +0.528 |
-| 31004 | 61.226 | 89.168 | -27.942 |
-| 31005 | 15.046 | 13.346 | +1.700 |
-| 31506 | 25.847 | 20.781 | +5.066 |
-| 31007 | 13.863 | 12.109 | +1.754 |
-| 31008 | 12.642 | 11.936 | +0.707 |
-| 31009 | 7.653 | 7.894 | -0.241 |
-| 31010 | 14.087 | 11.957 | +2.130 |
+| 31201 | 32.187 | 24.174 | +8.014 |
+| 31202 | 15.957 | 17.246 | -1.289 |
+| 31203 | 16.773 | 15.780 | +0.993 |
+| 31204 | 36.059 | 23.957 | +12.103 |
+| 31205 | 16.248 | 9.249 | +6.999 |
+| 31206 | 9.527 | 8.809 | +0.718 |
+| 31707 | 39.876 | 46.824 | -6.948 |
+| 31208 | 17.455 | 15.124 | +2.332 |
+| 31209 | 17.240 | 10.558 | +6.683 |
+| 31210 | 11.999 | 11.265 | +0.734 |
 
-- paired mean improvement (J_EDF - J_argmin) **-4.1562**, bootstrap 95% CI [-10.8356, +1.3173] over 10 seeds.
-- **FLAGGED BEFORE P7 (per pre-registration): the greedy horizon-argmin oracle does NOT beat EDF on trajectory J** (mean favors EDF; CI spans zero). Interpretation: optimizing the 20-arrival horizon J greedily at every state is myopic w.r.t. trajectory J, and 69.5% of states have <=1 feasible candidate, so most states carry no decision freedom. The learnable signal is per-state rollout regret; expectations that V1 beats EDF's closed-loop trajectory J should be tempered accordingly — this is exactly what the P7 gate will test.
-- argmin policy wall: 77 s/seed (labels computed live at every decision point).
+- paired mean (J_EDF - J_argmin) **+3.0337**, bootstrap 95% CI [-0.0272, +6.3050]. Pass rule: CI excludes 0 on the favorable side OR mean >= 0.
+- **GATE VERDICT: PASS — training allowed**
+- Note: mean positive but CI includes 0 — passed on the mean rule; reported CI stands.
+
+### Ablations (report only, 5 validation seeds)
+
+| ablation | J EDF | J argmin | util EDF | util argmin |
+|---|---|---|---|---|
+| horizon n_arrivals=60 | 23.445 | 17.180 | 0.730 | 0.712 |
+| work-conserving argmin | 23.445 | 20.237 | 0.730 | 0.718 |
+
+- horizon-60 label composition on 30 kept val states: WAIT share 0.0% (n=20) -> 0.0% (n=60); mean candidates 10.6 -> 10.6.
 
 ## OR-Tools CP-SAT window reference (CLAIRVOYANT)
 

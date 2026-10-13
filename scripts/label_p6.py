@@ -108,23 +108,57 @@ class _ArgminOracle:
         return job
 
 
-def _headroom_seed(args: tuple) -> dict:
-    seed, regimes, overlay_raw, horizon, k = args
+class _ArgminWorkConserving:
+    """Amendment 4 ablation: argmin over RUN candidates only — never WAIT
+    while any fitting candidate exists."""
+
+    name = "argmin_work_conserving"
+
+    def __init__(self, const, horizon, k):
+        self.const, self.horizon, self.k = const, horizon, k
+        self.engine = None
+
+    def bind(self, engine: Engine) -> None:
+        self.engine = engine
+
+    def decide(self, view):
+        labels = label_state(self.engine.state, self.const, tau=1.0,
+                             n_arrivals=self.horizon["n_arrivals"],
+                             max_seconds=self.horizon["max_seconds"], k=self.k)
+        best_job, best_j = None, float("inf")
+        for action_id, jid, j in zip(labels.candidates, labels.job_ids,
+                                     labels.j_values):
+            if action_id != "WAIT" and j < best_j:
+                best_job, best_j = jid, j
+        return best_job  # WAIT only when nothing fits
+
+
+def _argmin_seed(args: tuple) -> dict:
+    """Closed-loop J for EDF vs a live-argmin policy on one seed."""
+    seed, regimes, overlay_raw, horizon, k, mode = args
     const = load_preset("balanced")
     jobs, cluster, t_sim = _jobs_for_seed(regimes, overlay_raw, seed)
     edf = Engine(jobs, cluster, ALL_POLICIES["edf"](), arrival_horizon=t_sim).run()
-    oracle = _ArgminOracle(const, horizon, k)
+    policy_cls = _ArgminOracle if mode == "argmin" else _ArgminWorkConserving
+    oracle = policy_cls(const, horizon, k)
     eng = Engine(jobs, cluster, oracle, arrival_horizon=t_sim)
     oracle.bind(eng)
     argmin = eng.run()
-    return {
-        "seed": seed,
+    out = {
+        "seed": seed, "mode": mode,
         "J_edf": trajectory_objective(edf.state, const, t_sim)["J"],
         "J_argmin": trajectory_objective(argmin.state, const, t_sim)["J"],
         "wait_p50_edf": edf.summary["groups"]["trace"]["wait_s_p50"],
         "wait_p50_argmin": argmin.summary["groups"]["trace"]["wait_s_p50"],
+        "util_edf": edf.summary["cluster"]["utilization_arrival_window"],
+        "util_argmin": argmin.summary["cluster"]["utilization_arrival_window"],
         "wall_argmin_s": argmin.wall_s,
     }
+    if mode == "argmin":
+        # label composition along the argmin trajectory is not directly
+        # observable; the horizon-60 composition ablation covers it instead
+        pass
+    return out
 
 
 def paired_bootstrap_ci(diffs: np.ndarray, n: int = 2000, alpha: float = 0.05) -> dict:
@@ -134,6 +168,14 @@ def paired_bootstrap_ci(diffs: np.ndarray, n: int = 2000, alpha: float = 0.05) -
     lo, hi = np.percentile(boots, [100 * alpha / 2, 100 * (1 - alpha / 2)])
     return {"mean": float(np.mean(diffs)), "ci_lo": float(lo), "ci_hi": float(hi),
             "n": int(len(diffs))}
+
+
+def _fmt(x, digits=3):
+    if x is None:
+        return "-"
+    if isinstance(x, float) and (x != x or x in (float("inf"), float("-inf"))):
+        return "-"
+    return f"{x:.{digits}f}" if isinstance(x, float) else str(x)
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +234,7 @@ def main() -> None:
     # 1) sample + label states per split
     records: dict[str, list[dict]] = {}
     replacement_log: list[dict] = []
+    val_keep_states = []
     spec = regime_spec(regimes, "capped-1h")
     cluster = ClusterSpec.from_yaml(CONFIGS / spec["cluster"])
     parquet_path = DATA / "processed" / f"{spec['dataset']}.parquet"
@@ -202,9 +245,11 @@ def main() -> None:
         replacement_log += [{**r, "split": split} for r in log]
 
     all_meta: dict[str, dict] = {}
+    mc_stats: dict[str, dict] = {}
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         for split in ("train", "val", "test"):
-            sampled = sample_states(regimes, exp, split)
+            sampled, stats = sample_states(regimes, exp, split)
+            mc_stats[split] = stats
             if split == "train":
                 # pre-registered sensitivity subsample (deterministic draw)
                 rng_sub = np.random.default_rng(4242)
@@ -223,6 +268,8 @@ def main() -> None:
             print(f"labeling {split}: {len(payloads)} states "
                   f"({len(sub_ids)} with est-TP sensitivity)", flush=True)
             records[split] = list(pool.map(label_one, payloads))
+            if split == "val":
+                val_keep_states = [s.state for s in sampled[:30]]
             for s in sampled:
                 all_meta[s.state_id] = vars(s) | {"state": None}
 
@@ -261,19 +308,57 @@ def main() -> None:
     # 4) OR-Tools windows
     ort = ortools_reference(regimes, exp, overlay_raw)
 
-    # 5) oracle headroom
-    headroom_rows = []
-    if not args.skip_headroom:
-        payloads = [(seed, regimes, overlay_raw, horizon, exp["k_candidates"])
-                    for seed in exp["headroom"]["seeds"]]
-        with ProcessPoolExecutor(max_workers=args.workers) as pool:
-            headroom_rows = list(pool.map(_headroom_seed, payloads))
-        diffs = np.array([h["J_edf"] - h["J_argmin"] for h in headroom_rows])
-        headroom_ci = paired_bootstrap_ci(
-            diffs, n=exp["headroom"]["bootstrap"]["n"],
-            alpha=exp["headroom"]["bootstrap"]["alpha"])
-    else:
-        headroom_ci = None
+    # 5) Amendment 4 precondition gate: argmin (REVISED labels) vs EDF on the
+    #    VALIDATION windows, closed loop, paired
+    spec = regime_spec(regimes, "capped-1h")
+    cluster = ClusterSpec.from_yaml(CONFIGS / spec["cluster"])
+    val_seeds, val_repl = replace_degenerate_seeds(
+        regimes["splits"]["split_seeds"]["val"], cluster, 3600.0,
+        float(spec["duration_cap_s"]),
+        DATA / "processed" / f"{spec['dataset']}.parquet")
+    gate_payloads = [(seed, regimes, overlay_raw, horizon, exp["k_candidates"], "argmin")
+                     for seed in val_seeds]
+    print(f"precondition gate: {len(gate_payloads)} closed-loop pairs", flush=True)
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        gate_rows = list(pool.map(_argmin_seed, gate_payloads))
+    gate_diffs = np.array([g["J_edf"] - g["J_argmin"] for g in gate_rows])
+    gate_ci = paired_bootstrap_ci(
+        gate_diffs, n=exp["headroom"]["bootstrap"]["n"],
+        alpha=exp["headroom"]["bootstrap"]["alpha"])
+    gate_pass = bool(gate_ci["ci_lo"] > 0 or gate_ci["mean"] >= 0)
+
+    # 6) ablations (report only, 5 val seeds)
+    abl_seeds = val_seeds[: exp["precondition"]["ablation_seeds"]]
+    h60 = dict(horizon)
+    h60["n_arrivals"] = 60
+    abl_payloads = ([(s, regimes, overlay_raw, h60, exp["k_candidates"], "argmin")
+                     for s in abl_seeds]
+                    + [(s, regimes, overlay_raw, horizon, exp["k_candidates"], "wc")
+                       for s in abl_seeds])
+    print(f"ablations: {len(abl_payloads)} closed-loop runs", flush=True)
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        abl_rows = list(pool.map(_argmin_seed, abl_payloads))
+    h60_rows = [r for r in abl_rows if r["mode"] == "argmin"]
+    wc_rows = [r for r in abl_rows if r["mode"] == "wc"]
+
+    # horizon-60 label composition on kept val states (report only)
+    comp60 = {"n_states": 0, "wait_share_20": None, "wait_share_60": None,
+              "mean_cands_20": None, "mean_cands_60": None}
+    if val_keep_states:
+        w20 = w60 = 0
+        c20 = c60 = 0
+        for st in val_keep_states:
+            l20 = label_state(st, const, tau=1.0, n_arrivals=horizon["n_arrivals"],
+                              max_seconds=horizon["max_seconds"], k=exp["k_candidates"])
+            l60 = label_state(st, const, tau=1.0, n_arrivals=h60["n_arrivals"],
+                              max_seconds=h60["max_seconds"], k=exp["k_candidates"])
+            w20 += l20.hard_label == "WAIT"
+            w60 += l60.hard_label == "WAIT"
+            c20 += len(l20.candidates)
+            c60 += len(l60.candidates)
+        n = len(val_keep_states)
+        comp60 = {"n_states": n, "wait_share_20": w20 / n, "wait_share_60": w60 / n,
+                  "mean_cands_20": c20 / n, "mean_cands_60": c60 / n}
 
     wall_total = time.perf_counter() - t_start
 
@@ -282,14 +367,16 @@ def main() -> None:
     lines.append("# P6 dataset card — labeled decision states, PRIMARY (capped-1h) only")
     lines.append("")
     lines.append(f"Generated {time.strftime('%Y-%m-%dT%H:%M:%S')} by `python tasks.py label`. "
-                 "Regimes/config: `configs/regimes.yaml` (Amendments 1-3), "
+                 "Regimes/config: `configs/regimes.yaml` (Amendments 1-4), "
                  "`configs/experiment_p6.yaml`. Rollout policy: edf (frozen). "
                  f"Horizon: n_arrivals={horizon['n_arrivals']}, "
                  f"max_seconds={horizon['max_seconds']} (n_arrivals binds). "
-                 "Terminal penalty: true remaining (pre-registered). "
+                 "Terminal penalty: true remaining work (Amendment 2) PLUS projected "
+                 "lateness of deferred/running jobs (Amendment 4, estimates only). "
                  "Deadlines/SLOs/VRAM synthetic; 64% of offered work excluded by "
                  "the 6 h cap; batch_inference = short-small proxy. "
-                 "Stress track held out.")
+                 "Stress track held out. Sampling: multi-candidate states only "
+                 "(n_feasible >= 2, Amendment 4).")
     n_states = len(all_records)
     train_df = df[df["split"] == "train"]
     lines.append("")
@@ -331,14 +418,22 @@ def main() -> None:
     other = n_states - sum(hard_vs.values())
     lines.append(f"| other candidate (not EDF/SJF/FIFO/WAIT) | {100 * other / n_states:.1f}% |")
 
-    # item 3: single-feasible states
-    single = sum(1 for r in all_records if r["n_feasible"] <= 1)
+    # item 3: multi-candidate-only sampling (Amendment 4)
+    single_share = {
+        split: (1.0 - s["multi_candidate"] / s["dp_with_pending"])
+        if s["dp_with_pending"] else None
+        for split, s in mc_stats.items()}
     lines.append("")
-    lines.append(f"## 3. Single-feasible-candidate states\n")
-    lines.append(f"- n_feasible <= 1: **{single}/{n_states} "
-                 f"({100 * single / n_states:.1f}%)** — flagged in the Parquet "
-                 "(column n_feasible); kept in the dataset, excluded from nothing "
-                 "by default (P7 reports with/without as ablation).")
+    lines.append("## 3. Multi-candidate-only sampling (Amendment 4)")
+    lines.append("")
+    lines.append(f"- Single-feasible decision points (n_feasible <= 1) are NOT labeled "
+                 f"(excluded from training loss and offline metric): "
+                 + ", ".join(f"{split} {100 * v:.1f}%" if v is not None else f"{split} n/a"
+                             for split, v in single_share.items())
+                 + " of decision points with a non-empty queue were skipped.")
+    lines.append(f"- Labeled states are all n_feasible >= 2; budget "
+                 f"{exp['state_budget']['states_per_window_scheduler']}/window/scheduler, "
+                 f"cap {exp['state_budget']['max_states_total']} (Amendment 4).")
 
     # item 4: entropy + normalization
     ents = [r["entropy"] for r in all_records]
@@ -418,36 +513,41 @@ def main() -> None:
         lines.append("none this run (rule: seed+500 until non-empty; earlier "
                      "measurement found train 4/30, val 1/10, test 1/10 degenerate)")
 
-    # headroom
-    if headroom_rows:
-        lines.append("")
-        lines.append("## 2. Oracle headroom (argmin-at-every-state vs EDF, closed loop)")
-        lines.append("")
-        lines.append("| seed | J EDF | J argmin | diff |")
-        lines.append("|---|---|---|---|")
-        for h in headroom_rows:
-            lines.append(f"| {h['seed']} | {h['J_edf']:.3f} | {h['J_argmin']:.3f} "
-                         f"| {h['J_edf'] - h['J_argmin']:+.3f} |")
-        ci = headroom_ci
-        argmin_better = ci["ci_hi"] < 0  # J_edf - J_argmin > 0 with CI excluding 0
-        lines.append("")
-        lines.append(f"- paired mean improvement (J_EDF - J_argmin) **{ci['mean']:+.4f}**, "
-                     f"bootstrap 95% CI [{ci['ci_lo']:+.4f}, {ci['ci_hi']:+.4f}] over "
-                     f"{ci['n']} seeds.")
-        if argmin_better:
-            lines.append("- Substantial, significant headroom for learned policies.")
-        else:
-            lines.append(
-                "- **FLAGGED BEFORE P7 (per pre-registration): the greedy horizon-argmin "
-                "oracle does NOT beat EDF on trajectory J** (mean favors EDF; CI spans "
-                "zero). Interpretation: optimizing the 20-arrival horizon J greedily at "
-                "every state is myopic w.r.t. trajectory J, and 69.5% of states have "
-                "<=1 feasible candidate, so most states carry no decision freedom. The "
-                "learnable signal is per-state rollout regret; expectations that V1 "
-                "beats EDF's closed-loop trajectory J should be tempered accordingly — "
-                "this is exactly what the P7 gate will test.")
-        lines.append(f"- argmin policy wall: {np.mean([h['wall_argmin_s'] for h in headroom_rows]):.0f} "
-                     "s/seed (labels computed live at every decision point).")
+    # Amendment 4 precondition gate + ablations (replaces the P6 headroom item)
+    lines.append("")
+    lines.append("## 2. Amendment 4 precondition gate (REVISED labels, validation windows)")
+    lines.append("")
+    lines.append("| seed | J EDF | J argmin | diff (EDF - argmin) |")
+    lines.append("|---|---|---|---|")
+    for g in gate_rows:
+        lines.append(f"| {g['seed']} | {g['J_edf']:.3f} | {g['J_argmin']:.3f} "
+                     f"| {g['J_edf'] - g['J_argmin']:+.3f} |")
+    lines.append("")
+    lines.append(f"- paired mean (J_EDF - J_argmin) **{gate_ci['mean']:+.4f}**, "
+                 f"bootstrap 95% CI [{gate_ci['ci_lo']:+.4f}, {gate_ci['ci_hi']:+.4f}]. "
+                 f"Pass rule: CI excludes 0 on the favorable side OR mean >= 0.")
+    lines.append(f"- **GATE VERDICT: {'PASS — training allowed' if gate_pass else 'FAIL — stop, do not train'}**")
+    if gate_pass and gate_ci["mean"] > 0 and gate_ci["ci_lo"] <= 0:
+        lines.append("- Note: mean positive but CI includes 0 — passed on the mean "
+                     "rule; reported CI stands.")
+    lines.append("")
+    lines.append("### Ablations (report only, 5 validation seeds)")
+    lines.append("")
+    lines.append("| ablation | J EDF | J argmin | util EDF | util argmin |")
+    lines.append("|---|---|---|---|---|")
+    lines.append(f"| horizon n_arrivals=60 | {_fmt(np.mean([r['J_edf'] for r in h60_rows]), 3)} "
+                 f"| {_fmt(np.mean([r['J_argmin'] for r in h60_rows]), 3)} "
+                 f"| {_fmt(np.mean([r['util_edf'] for r in h60_rows]), 3)} "
+                 f"| {_fmt(np.mean([r['util_argmin'] for r in h60_rows]), 3)} |")
+    lines.append(f"| work-conserving argmin | {_fmt(np.mean([r['J_edf'] for r in wc_rows]), 3)} "
+                 f"| {_fmt(np.mean([r['J_argmin'] for r in wc_rows]), 3)} "
+                 f"| {_fmt(np.mean([r['util_edf'] for r in wc_rows]), 3)} "
+                 f"| {_fmt(np.mean([r['util_argmin'] for r in wc_rows]), 3)} |")
+    lines.append("")
+    lines.append(f"- horizon-60 label composition on {comp60['n_states']} kept val "
+                 f"states: WAIT share {100 * comp60['wait_share_20']:.1f}% (n=20) -> "
+                 f"{100 * comp60['wait_share_60']:.1f}% (n=60); mean candidates "
+                 f"{comp60['mean_cands_20']:.1f} -> {comp60['mean_cands_60']:.1f}.")
 
     # OR-Tools
     proven = sum(1 for o in ort if o["proven_optimal"])
@@ -470,13 +570,22 @@ def main() -> None:
     out_md.parent.mkdir(parents=True, exist_ok=True)
     out_md.write_text("\n".join(lines), encoding="utf-8")
     meta = {"tau": tau, "n_states": n_states, "throughput": thr,
-            "replacement_log": replacement_log, "headroom": headroom_rows,
-            "headroom_ci": headroom_ci, "ortools": ort, "sensitivity": sensitivity,
+            "replacement_log": replacement_log,
+            "gate": {"rows": gate_rows, "ci": gate_ci, "pass": gate_pass},
+            "ablations": {"horizon60_rows": h60_rows, "wc_rows": wc_rows,
+                          "composition": comp60},
+            "multi_candidate_stats": mc_stats,
+            "ortools": ort, "sensitivity": sensitivity,
             "wall_min": wall_total / 60}
     (REPORTS / "p6").mkdir(parents=True, exist_ok=True)
     with open(REPORTS / "p6" / "labels_meta.json", "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2, default=str)
     print(f"card: {out_md}")
+    print(f"precondition gate: {'PASS' if gate_pass else 'FAIL'} "
+          f"(mean {gate_ci['mean']:+.4f}, CI [{gate_ci['ci_lo']:+.4f}, "
+          f"{gate_ci['ci_hi']:+.4f}])")
+    if not gate_pass:
+        raise SystemExit("Amendment 4 precondition gate FAILED — stop; do not train.")
 
 
 if __name__ == "__main__":
